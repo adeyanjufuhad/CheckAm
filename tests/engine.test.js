@@ -339,6 +339,27 @@ test('AI screenshots: rejects non-images and oversized pictures', async () => {
   assert.equal((await aiCheck(imageRequest({ image: 'data:image/png;base64,' + 'A'.repeat(4_100_000) }), env)).status, 413);
 });
 
+// ---------- Vercel stats forwarding ----------
+
+test('Vercel /api/log forwards anonymous stats to the Cloudflare database', async () => {
+  const { POST } = await import('../api/log.js');
+  const realFetch = globalThis.fetch;
+  let forwarded;
+  globalThis.fetch = async (url, init) => {
+    forwarded = { url, body: init.body };
+    return new Response(null, { status: 204 });
+  };
+  try {
+    const body = JSON.stringify({ type: 'feedback', level: 'danger', helpful: 'yes' });
+    const res = await POST(new Request('http://x/api/log', { method: 'POST', body }));
+    assert.equal(res.status, 204);
+    assert.equal(forwarded.url, 'https://checkam.pages.dev/api/log');
+    assert.equal(forwarded.body, body);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 // ---------- AI output guardrails ----------
 
 test('AI output: no "safe" verdict, reassuring text dropped, unexplained verdicts downgraded', async () => {

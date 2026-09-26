@@ -236,7 +236,7 @@ flowchart TB
 | **AI check** | `server/ai-check.js` | Optional deeper read. Tries Groq, then Workers AI (main model, then backup model), with per-attempt timeouts. JSON-schema output, code-level guardrails (no "safe" verdict, reassuring text removed, verdicts without reasons downgraded). |
 | **Link checker** | `server/check-link.js` | Host-neutral `checkLinks(request, env)`: short-link expansion, RDAP, Safe Browsing, URLhaus |
 | **Cloudflare routes** | `functions/` | Thin Pages Functions wrappers, plus `/api/log` to D1 |
-| **Vercel routes** | `api/` | Thin Vercel Function wrappers (`/api/log` is a no-op there) |
+| **Vercel routes** | `api/` | Thin Vercel Function wrappers (`/api/log` forwards stats to the Cloudflare site) |
 
 ### 4.3 Sequence: checking a message with a link
 
@@ -312,7 +312,8 @@ Both hosts serve the same `public/` folder and share one implementation of the l
 | Static site | ✅ | ✅ |
 | `/api/check-link` | ✅ `functions/api/check-link.js` | ✅ `api/check-link.js` |
 | Edge caching of RDAP lookups | ✅ (`cf.cacheTtl`) | In-memory per instance only |
-| Anonymous stats (`/api/log`) | ✅ stored in D1 | Accepted and discarded |
+| Anonymous stats (`/api/log`) | ✅ stored in D1 | ✅ forwarded to the Cloudflare site's D1 (`LOG_FORWARD_URL`) |
+| AI check (`/api/ai-check`) | `[ai]` binding + `GROQ_API_KEY` secret | Needs its **own** `GROQ_API_KEY` (optionally `CF_ACCOUNT_ID` + `CF_AI_TOKEN`) in Vercel settings |
 | Security headers | `public/_headers` | `vercel.json` |
 | Share-target fallback | `functions/share-target.js` | `api/share-target.js` via rewrite |
 
@@ -599,7 +600,7 @@ CheckAm/
 │   └── share-target.js             # Fallback redirect
 ├── api/                            # Vercel Functions
 │   ├── check-link.js               # → server/check-link.js
-│   ├── log.js                      # No-op (no D1 on Vercel)
+│   ├── log.js                      # Forwards stats to the Cloudflare site
 │   └── share-target.js             # Fallback redirect
 ├── tests/
 │   ├── engine.test.js              # Engine, links, prices, AI guardrails, copy
@@ -729,6 +730,8 @@ npx vercel login
 npm run deploy:vercel
 ```
 
+**Vercel keeps its own settings, separate from Cloudflare.** Add `GROQ_API_KEY` (and optionally `GSB_API_KEY`, `URLHAUS_AUTH_KEY`) under Project → Settings → Environment Variables, then **redeploy** (Deployments → ⋯ → Redeploy), because Vercel only applies new variables to new deployments. Without `GROQ_API_KEY` the AI button says it "isn't switched on for this site". Anonymous stats are forwarded to the Cloudflare site, so both sites feed the same numbers.
+
 ### Environment variables (both hosts)
 
 | Variable | Required | Where to get it | Notes |
@@ -809,7 +812,7 @@ Danger stays red (`#B42318`) on purpose, so it reads as "stop" at a glance.
 | **Small curated official list** | High precision: every entry is something CheckAm can vouch for | Coverage grows slowly |
 | **Context-aware fees** | "Application fee" from a school is normal; from a job offer it isn't | More complex rules |
 | **Short-link expansion without visiting the destination** | Shows where links go without loading potentially malicious pages | Redirects done in JavaScript on the destination page aren't seen |
-| **Host-neutral server code** | Same logic on Cloudflare and Vercel | Anonymous stats only on Cloudflare (D1) |
+| **Host-neutral server code** | Same logic on Cloudflare and Vercel | Each host needs its own AI key; stats are stored once, in Cloudflare D1 |
 
 ---
 
@@ -824,7 +827,7 @@ Danger stays red (`#B42318`) on purpose, so it reads as "stop" at a glance.
 - **OCR quality varies** with blurry or cropped screenshots. Users can fix the text, or ask the AI to read the picture itself. Vision models can also misread tiny digits in very low-quality images.
 - **Google Safe Browsing's free tier is non-commercial.** Paid business products would need Google Web Risk.
 - **Pidgin copy needs review by native speakers** before a wide launch.
-- **Anonymous stats aren't stored on Vercel** (Cloudflare D1 only).
+- **Each host needs its own settings.** Keys added to Cloudflare don't apply to Vercel, and vice versa.
 
 ---
 

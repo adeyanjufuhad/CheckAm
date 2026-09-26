@@ -320,9 +320,10 @@ async function askAI() {
       signal: controller.signal,
     });
     clearTimeout(timer);
-    if (res.status === 429) {
+    if (res.status === 429 || res.status === 503) {
       if (runId !== state.runId) return;
-      state.ai = { status: 'failed', reason: 'limit' };
+      // 429: every free allowance used up today. 503: this site has no AI key set.
+      state.ai = { status: 'failed', reason: res.status === 429 ? 'limit' : 'unavailable' };
       render();
       return;
     }
@@ -364,6 +365,8 @@ function renderAI() {
     block.append(el('p', { class: 'pending' }, el('span', { class: 'spinner', 'aria-hidden': 'true' }), t('aiLoading')));
   } else if (ai.status === 'failed' && ai.reason === 'limit') {
     block.append(el('p', { class: 'muted' }, t('aiLimit')));
+  } else if (ai.status === 'failed' && ai.reason === 'unavailable') {
+    block.append(el('p', { class: 'muted' }, t('aiUnavailable')));
   } else if (ai.status === 'failed') {
     block.append(
       el('p', { class: 'muted' }, t('aiFailed')),

@@ -159,3 +159,19 @@ test('every id the engine can emit has English and Pidgin copy', () => {
     for (const a of r.advice) assert.ok(ADVICE[a.id]?.en && ADVICE[a.id]?.pcm, `copy for advice ${a.id}`);
   }
 });
+
+// ---------- Interface text ----------
+
+test('interface text loads and every key exists in English and Pidgin', async () => {
+  const { UI } = await import('../public/js/ui-strings.js');
+  const en = Object.keys(UI.en).sort();
+  const pcm = Object.keys(UI.pcm).sort();
+  assert.deepEqual(pcm, en);
+  for (const k of en) assert.ok(UI.en[k] && UI.pcm[k], `ui string ${k}`);
+});
+
+test('contact config builds WhatsApp and email links', async () => {
+  const { whatsappLink, emailLink } = await import('../public/js/config.js');
+  assert.match(whatsappLink('hi'), /^https:\/\/wa\.me\/\d+\?text=hi$/);
+  assert.match(emailLink('s', 'b'), /^mailto:[^?]+@[^?]+\?subject=s&body=b$/);
+});

@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS events (
   lang TEXT,                   -- 'en' | 'pcm'
   source TEXT,                 -- 'text' | 'image' | 'share'
   rules TEXT,                  -- comma-separated rule ids that fired
-  helpful TEXT,                -- feedback: 'yes' | 'no'
-  first_time TEXT              -- feedback: 'yes' | 'no'
+  helpful TEXT,                -- feedback: did it make sense? 'yes' | 'no'
+  correct TEXT,                -- feedback: was the result right? 'right' | 'was-scam' | 'was-genuine' | 'unsure'
+  first_time TEXT              -- feedback: first time using CheckAm? 'yes' | 'no'
 );
 CREATE INDEX IF NOT EXISTS idx_events_created ON events (created_at);

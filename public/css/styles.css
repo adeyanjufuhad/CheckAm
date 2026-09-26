@@ -431,3 +431,37 @@ textarea:focus { border-color: var(--focus); outline: none; box-shadow: 0 0 0 3p
   .lang button { padding: 6px 11px; }
   .install { flex-direction: column; align-items: stretch; }
 }
+
+/* ---------- Reporting mistakes ---------- */
+
+.report-ask {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--caution-bg);
+  border: 1px solid var(--caution-line);
+  text-align: left;
+}
+.report-ask p { font-weight: 400; margin: 0 0 10px; }
+.report-links { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.footer a, .info a { color: var(--brand); font-weight: 600; }
+.footer-report { margin-bottom: 8px; }
+.footer-report a { white-space: nowrap; }
+
+/* ---------- Privacy page ---------- */
+
+.doc { padding-top: 24px; padding-bottom: 8px; }
+.doc a { color: var(--brand); font-weight: 600; }
+.doc h1 { font-size: clamp(1.6rem, 5vw, 2rem); }
+.doc h2 { font-size: 1.15rem; margin: 28px 0 8px; }
+.doc p, .doc li { color: var(--ink); }
+.doc ul { padding-left: 1.3em; display: grid; gap: 6px; }
+.doc .summary {
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  margin: 16px 0;
+}
+.doc .updated { color: var(--muted); font-size: .92rem; }
+.back { display: inline-block; margin-top: 16px; color: var(--brand); font-weight: 600; }

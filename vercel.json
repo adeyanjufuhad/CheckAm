@@ -3,7 +3,7 @@
   "framework": null,
   "buildCommand": "",
   "outputDirectory": "public",
-  "cleanUrls": false,
+  "cleanUrls": true,
   "rewrites": [
     { "source": "/share-target", "destination": "/api/share-target" }
   ],

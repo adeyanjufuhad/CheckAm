@@ -2,11 +2,9 @@ name = "checkam"
 pages_build_output_dir = "public"
 compatibility_date = "2025-09-01"
 
-# Optional: anonymous usage + feedback storage (no message text is ever stored).
-# 1. npx wrangler d1 create checkam
-# 2. Paste the database_id it prints below and uncomment.
-# 3. npm run db:init
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "checkam"
-# database_id = "PASTE-ID-HERE"
+# Anonymous usage + feedback storage (no message text is ever stored).
+# Created with `npx wrangler d1 create checkam`; tables from `npm run db:init`.
+[[d1_databases]]
+binding = "DB"
+database_name = "checkam"
+database_id = "121b1659-0d6a-4c76-96a4-34627d26124c"

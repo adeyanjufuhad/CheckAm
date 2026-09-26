@@ -9,8 +9,9 @@
     "test": "node --test \"tests/**/*.test.js\"",
     "deploy": "wrangler pages deploy public --project-name checkam --branch CheckAm",
     "db:init": "wrangler d1 execute checkam --remote --file=schema.sql",
-    "db:stats": "wrangler d1 execute checkam --remote --command \"SELECT type, level, helpful, COUNT(*) AS n FROM events GROUP BY type, level, helpful ORDER BY n DESC\"",
-    "deploy:vercel": "vercel deploy --prod"
+    "db:stats": "wrangler d1 execute checkam --remote --command \"SELECT type, level, helpful, correct, COUNT(*) AS n FROM events GROUP BY type, level, helpful, correct ORDER BY n DESC\"",
+    "deploy:vercel": "vercel deploy --prod",
+    "db:init:local": "wrangler d1 execute checkam --local --file=schema.sql"
   },
   "devDependencies": {
     "wrangler": "^4.141.0"

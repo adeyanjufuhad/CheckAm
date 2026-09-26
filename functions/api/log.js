@@ -2,14 +2,16 @@
 // understand CheckAm and come back to it.
 //
 // Stores only: result level, category, language, input type, which rule ids
-// fired, and yes/no feedback answers. Never message text, links, numbers, IP
-// addresses or any identifier. If no D1 database is bound, it's a no-op.
+// fired, and the feedback answers (made sense? result right? first time?).
+// Never message text, links, numbers, IP addresses or any identifier.
+// If no D1 database is bound, it's a no-op.
 
 const LEVELS = new Set(['danger', 'caution', 'unclear']);
 const LANGS = new Set(['en', 'pcm']);
 const SOURCES = new Set(['text', 'image', 'share']);
 const TYPES = new Set(['check', 'feedback']);
 const YES_NO = new Set(['yes', 'no']);
+const CORRECT = new Set(['right', 'was-scam', 'was-genuine', 'unsure']);
 const ID_RE = /^[a-z0-9-]{1,40}$/;
 
 const pick = (set, v) => (set.has(v) ? v : null);
@@ -30,7 +32,7 @@ export async function onRequestPost({ request, env }) {
   const category = typeof body.category === 'string' && ID_RE.test(body.category) ? body.category : null;
 
   await env.DB.prepare(
-    'INSERT INTO events (type, level, category, lang, source, rules, helpful, first_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO events (type, level, category, lang, source, rules, helpful, correct, first_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
   ).bind(
     type,
     pick(LEVELS, body.level),
@@ -39,6 +41,7 @@ export async function onRequestPost({ request, env }) {
     pick(SOURCES, body.source),
     rules,
     pick(YES_NO, body.helpful),
+    pick(CORRECT, body.correct),
     pick(YES_NO, body.firstTime),
   ).run();
 

@@ -2,6 +2,7 @@ import { analyze } from './engine/analyze.js';
 import { extractUrls } from './engine/links.js';
 import { LEVELS, FINDINGS, FACTS, UNKNOWNS, ADVICE, fmt } from './engine/copy.js';
 import { UI, EXAMPLES } from './ui-strings.js';
+import { whatsappLink, emailLink } from './config.js';
 
 const $ = (sel) => document.querySelector(sel);
 const form = $('#check-form');
@@ -93,6 +94,7 @@ function applyLanguage() {
   for (const node of document.querySelectorAll('[data-i18n]')) node.textContent = t(node.dataset.i18n);
   for (const node of document.querySelectorAll('[data-i18n-placeholder]')) node.placeholder = t(node.dataset.i18nPlaceholder);
   for (const btn of document.querySelectorAll('[data-lang]')) btn.setAttribute('aria-pressed', String(btn.dataset.lang === state.lang));
+  updateContactLinks();
   if (state.report) render();
 }
 
@@ -111,6 +113,7 @@ async function runCheck(text, source) {
     input.focus();
     return;
   }
+  resetFeedback(); // send any answers about the previous result first
   const runId = ++state.runId;
   state.text = trimmed;
   state.source = source;
@@ -228,32 +231,63 @@ function render({ scroll = false } = {}) {
   }
 }
 
-let feedbackStep = 'ask';
-let feedbackHelpful = null;
+// Three quick questions per result. Answers are sent once, when all three are
+// done, or earlier if the person moves on (new check, leaves the page), so a
+// half-answered survey still counts.
+const FEEDBACK_STEPS = ['helpful', 'correct', 'firstTime', 'done'];
+let feedback = { step: 'helpful', answers: {}, sent: false };
+
+function flushFeedback() {
+  if (feedback.sent || !Object.keys(feedback.answers).length || !state.report) return;
+  feedback.sent = true;
+  const r = state.report;
+  log({ type: 'feedback', level: r.level, category: r.category, source: state.source, rules: r.meta.ruleIds, ...feedback.answers });
+}
+
+function resetFeedback() {
+  flushFeedback();
+  feedback = { step: 'helpful', answers: {}, sent: false };
+}
+
+function reportLinks(template) {
+  return el('div', { class: 'report-links' },
+    el('a', { class: 'btn btn-chip', href: whatsappLink(template), target: '_blank', rel: 'noopener' }, t('reportWhatsApp')),
+    el('a', { class: 'btn btn-chip', href: emailLink(t('reportSubject'), template) }, t('reportEmail')),
+  );
+}
+
 function renderFeedback() {
   const box = el('div', { class: 'feedback' });
-  const answer = (value) => {
-    if (feedbackStep === 'ask') {
-      feedbackHelpful = value;
-      feedbackStep = 'first';
-    } else {
-      log({ type: 'feedback', level: state.report.level, category: state.report.category, source: state.source, rules: state.report.meta.ruleIds, helpful: feedbackHelpful, firstTime: value });
-      feedbackStep = 'done';
-    }
+  const answer = (key, value) => {
+    feedback.answers[key] = value;
+    feedback.step = FEEDBACK_STEPS[FEEDBACK_STEPS.indexOf(key) + 1];
+    if (feedback.step === 'done') flushFeedback();
     box.replaceWith(renderFeedback());
   };
-  if (feedbackStep === 'ask') {
+  const chip = (key, value, label) => el('button', { type: 'button', class: 'btn btn-chip', onclick: () => answer(key, value) }, t(label));
+
+  if (feedback.step === 'helpful') {
     box.append(el('p', {}, t('fbQuestion')), el('div', { class: 'fb-buttons' },
-      el('button', { type: 'button', class: 'btn btn-chip', onclick: () => answer('yes') }, t('fbYes')),
-      el('button', { type: 'button', class: 'btn btn-chip', onclick: () => answer('no') }, t('fbNo')),
-    ));
-  } else if (feedbackStep === 'first') {
+      chip('helpful', 'yes', 'fbYes'), chip('helpful', 'no', 'fbNo')));
+  } else if (feedback.step === 'correct') {
+    box.append(el('p', {}, t('fbCorrect')), el('div', { class: 'fb-buttons' },
+      chip('correct', 'right', 'fbRight'), chip('correct', 'was-scam', 'fbWasScam'),
+      chip('correct', 'was-genuine', 'fbWasGenuine'), chip('correct', 'unsure', 'fbUnsure')));
+  } else if (feedback.step === 'firstTime') {
     box.append(el('p', {}, t('fbFirst')), el('div', { class: 'fb-buttons' },
-      el('button', { type: 'button', class: 'btn btn-chip', onclick: () => answer('yes') }, t('yes')),
-      el('button', { type: 'button', class: 'btn btn-chip', onclick: () => answer('no') }, t('no')),
-    ));
+      chip('firstTime', 'yes', 'yes'), chip('firstTime', 'no', 'no')));
   } else {
     box.append(el('p', { class: 'muted' }, t('fbThanks')));
+  }
+
+  // CheckAm got it wrong: ask for the message so the rules can be fixed.
+  const wrong = feedback.answers.correct === 'was-scam' || feedback.answers.correct === 'was-genuine';
+  if (wrong) {
+    const template = t('reportWrongTemplate', {
+      level: pick(LEVELS[state.report.level].headline),
+      actual: t(feedback.answers.correct === 'was-scam' ? 'actualScam' : 'actualGenuine'),
+    });
+    box.append(el('div', { class: 'report-ask' }, el('p', {}, t('reportAsk')), reportLinks(template)));
   }
   return box;
 }
@@ -298,9 +332,9 @@ async function copyResult(btn) {
 }
 
 function resetForm() {
+  resetFeedback();
   state.report = null;
   state.runId++;
-  feedbackStep = 'ask';
   input.value = '';
   $('#preview').hidden = true;
   setStatus('');
@@ -329,7 +363,6 @@ async function handleImage(file, extraText = '') {
     }
     input.value = combined;
     setStatus(t('ocrDone'));
-    feedbackStep = 'ask';
     runCheck(combined, 'image');
   } catch {
     setStatus(t('ocrFailed'), 'error');
@@ -369,7 +402,6 @@ async function consumeSharedContent() {
 
 form.addEventListener('submit', (e) => {
   e.preventDefault();
-  feedbackStep = 'ask';
   runCheck(input.value, 'text');
 });
 
@@ -389,7 +421,6 @@ input.addEventListener('paste', (e) => {
 for (const btn of document.querySelectorAll('[data-example]')) {
   btn.addEventListener('click', () => {
     input.value = EXAMPLES[btn.dataset.example];
-    feedbackStep = 'ask';
     runCheck(input.value, 'text');
   });
 }
@@ -397,6 +428,14 @@ for (const btn of document.querySelectorAll('[data-example]')) {
 for (const btn of document.querySelectorAll('[data-lang]')) {
   btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
 }
+
+// Footer report links (general reports, not tied to a result).
+function updateContactLinks() {
+  for (const a of document.querySelectorAll('[data-contact="whatsapp"]')) a.href = whatsappLink(t('reportGeneralTemplate'));
+  for (const a of document.querySelectorAll('[data-contact="email"]')) a.href = emailLink(t('reportSubject'), t('reportGeneralTemplate'));
+}
+
+window.addEventListener('pagehide', flushFeedback);
 
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();

@@ -29,7 +29,13 @@ const REASSURING = /\b(?:is|looks|seems|appears|sounds)\s+(?:to be\s+)?(?:safe|l
 
 const LANGUAGE = {
   en: 'simple, plain English',
-  pcm: 'natural Nigerian Pidgin (Naija), the way people write it on WhatsApp',
+  pcm: 'natural Nigerian Pidgin (Naija), the way people write it on WhatsApp. Example of the style: "Dem dey ask you to pay before you see the land. No pay anything until you confirm am by yourself." Do not answer in standard English',
+};
+
+// Models follow the language best when it's repeated right next to the message.
+const LANGUAGE_REMINDER = {
+  en: 'Write the title, why and checks in simple English.',
+  pcm: 'IMPORTANT: Write every title, why and check in Nigerian Pidgin (Naija), not in standard English.',
 };
 
 const SCHEMA = {
@@ -96,7 +102,7 @@ export async function aiCheck(request, env = {}) {
 
   const messages = [
     { role: 'system', content: systemPrompt(lang) },
-    { role: 'user', content: `Message to check:\n"""\n${text}\n"""` },
+    { role: 'user', content: `Message to check:\n"""\n${text}\n"""\n\n${LANGUAGE_REMINDER[lang]}` },
   ];
 
   const started = Date.now();

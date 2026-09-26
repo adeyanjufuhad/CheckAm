@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "checkam",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["wrangler", "pages", "dev", "public", "--port", "8788"],
+      "port": 8788
+    }
+  ]
+}

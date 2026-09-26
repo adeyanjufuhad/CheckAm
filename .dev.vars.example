@@ -1,0 +1,7 @@
+# Copy to .dev.vars for local testing. In production set these in
+# Cloudflare dashboard > Pages > checkam > Settings > Variables and secrets.
+
+# Google Safe Browsing API key (free, non-commercial use only).
+GSB_API_KEY=
+# abuse.ch URLhaus Auth-Key (free account at https://auth.abuse.ch/).
+URLHAUS_AUTH_KEY=

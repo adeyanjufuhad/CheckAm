@@ -1,0 +1,15 @@
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; worker-src 'self' blob: https://cdn.jsdelivr.net; connect-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: blob:; style-src 'self'; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+  X-Frame-Options: DENY
+
+/sw.js
+  Cache-Control: no-cache
+
+/js/*
+  Cache-Control: no-cache
+
+/css/*
+  Cache-Control: no-cache

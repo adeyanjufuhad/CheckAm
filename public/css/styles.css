@@ -1,5 +1,6 @@
 /* CheckAm: mobile-first, readable for older eyes, no web fonts (data is expensive).
    Palette: #000000 black, #14213D navy, #FCA311 orange, #E5E5E5 grey, #FFFFFF white.
+   White theme only, regardless of the device's dark-mode setting.
    Danger stays red: it has to read as "stop" at a glance, whatever the brand.
    No green anywhere in results: CheckAm never signals "safe". */
 
@@ -10,12 +11,12 @@
   --grey: #e5e5e5;
   --white: #ffffff;
 
-  --bg: var(--grey);
+  --bg: var(--white);
   --surface: var(--white);
   --surface-2: var(--grey);
   --ink: var(--black);
   --muted: #3d4a66;
-  --line: #d4d4d4;
+  --line: var(--grey);
   --brand: var(--navy);
   --brand-ink: var(--white);
   --accent: var(--orange);
@@ -36,34 +37,8 @@
 
   --radius: 14px;
   --shadow: 0 1px 2px rgba(20, 33, 61, .08), 0 4px 16px rgba(20, 33, 61, .06);
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: var(--black);
-    --surface: var(--navy);
-    --surface-2: #1d2d52;
-    --ink: var(--white);
-    --muted: #b9c0cf;
-    --line: #2b3c63;
-    --brand: var(--grey);
-    --brand-ink: var(--black);
-    --topbar: var(--navy);
-    --topbar-ink: var(--white);
-    --danger: #ff8a80;
-    --danger-bg: #2c1113;
-    --danger-line: #6b2622;
-    --focus: var(--orange);
-    --caution: var(--orange);
-    --caution-bg: #2a1f0b;
-    --caution-line: #8a5a0a;
-    --unclear: var(--grey);
-    --unclear-bg: #1d2d52;
-    --unclear-line: #2b3c63;
-    --shadow: none;
-    color-scheme: dark;
-  }
+  /* Always white: "only" also stops phones from auto-darkening the page. */
+  color-scheme: only light;
 }
 
 *, *::before, *::after { box-sizing: border-box; }

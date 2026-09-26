@@ -293,6 +293,52 @@ test('AI: Groq answer is used when it works', async () => {
   }
 });
 
+// ---------- AI reading screenshots ----------
+
+const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+const imageRequest = (body) => new Request('http://x/api/ai-check', { method: 'POST', body: JSON.stringify({ lang: 'en', ...body }) });
+
+test('AI screenshots: vision models only, picture attached, transcript returned', async () => {
+  const { aiCheck, providers } = await import('../server/ai-check.js');
+  const env = { GROQ_API_KEY: 'k', AI: { run: async () => ({ response: goodAnswer }) } };
+  assert.deepEqual(providers(env, { vision: true }).map((p) => p.model), ['qwen/qwen3.8-27b', '@cf/meta/llama-4-scout-17b-16e-instruct']);
+
+  const realFetch = globalThis.fetch;
+  let sent;
+  globalThis.fetch = async (url, init) => {
+    sent = JSON.parse(init.body);
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ ...goodAnswer, transcript: 'Pay  N50,000\n\n\n\nto secure your slot' }) } }] }), { status: 200 });
+  };
+  try {
+    const res = await aiCheck(imageRequest({ image: TINY_PNG, text: 'Pay N5O,OOO' }), env);
+    const out = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(out.transcript, 'Pay N50,000\n\nto secure your slot');
+    const content = sent.messages[1].content;
+    assert.ok(Array.isArray(content));
+    assert.ok(content.some((c) => c.type === 'image_url' && c.image_url.url === TINY_PNG));
+    assert.ok(content[0].text.includes('Pay N5O,OOO'));
+    assert.ok(sent.response_format.json_schema.schema.required.includes('transcript'));
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('AI screenshots: literal "\\n" in the reading becomes real line breaks', async () => {
+  const { sanitize } = await import('../server/ai-check.js');
+  const out = sanitize({ ...goodAnswer, transcript: 'LAND FOR SALE\\nPay 50k deposit to secure' });
+  assert.equal(out.transcript, 'LAND FOR SALE\nPay 50k deposit to secure');
+  const r = analyze(out.transcript);
+  assert.ok(ids(r).includes('upfront-fee'));
+});
+
+test('AI screenshots: rejects non-images and oversized pictures', async () => {
+  const { aiCheck } = await import('../server/ai-check.js');
+  const env = { AI: { run: async () => ({ response: goodAnswer }) } };
+  assert.equal((await aiCheck(imageRequest({ image: 'data:text/html;base64,PGgxPg==' }), env)).status, 400);
+  assert.equal((await aiCheck(imageRequest({ image: 'data:image/png;base64,' + 'A'.repeat(4_100_000) }), env)).status, 413);
+});
+
 // ---------- AI output guardrails ----------
 
 test('AI output: no "safe" verdict, reassuring text dropped, unexplained verdicts downgraded', async () => {

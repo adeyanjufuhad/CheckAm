@@ -91,6 +91,7 @@ CheckAm is a **lightweight website and installable app**. People paste a message
 | **Never says "safe"** | The best result is *"We can't confirm this is safe"*, which points to the AI check. There is no green tick anywhere. When money is involved, it says so. |
 | **Tailored next steps** | Advice changes by scam type: call your relative on their old number, check your balance in the bank app, look for the scheme on `.gov.ng` |
 | **Share with family** | One tap sends a short summary to WhatsApp so the young person can warn the parent, or the other way round |
+| **AI reads screenshots** | For a screenshot, the AI button sends the picture itself to a vision model, which catches what on-phone text reading gets wrong. If the AI's reading is clearly better, CheckAm swaps it into the text box and re-runs its own checks. |
 | **Optional AI check** | One tap sends the message to a free AI model (Groq, with Cloudflare Workers AI as automatic backup) for a deeper read, which catches things rules can't, like a "brand new MacBook for ₦600k". The AI can only *raise* the warning, never say "safe". |
 | **Private by design** | The message is analysed **on the phone**. Only links are sent online, unless the person taps the AI check. Nothing is stored. |
 | **Light and offline-capable** | About 144 KB of code before compression, no framework, no web fonts. The rules work with no data connection. |
@@ -505,7 +506,9 @@ Errors: `400 invalid_json`, `400 no_urls`, `405 method_not_allowed`. Every exter
 
 ### `POST /api/ai-check`
 
-Only called after the person taps **Ask AI to check**. This is the one endpoint that receives message text. Nothing is stored.
+Only called after the person taps **Ask AI to check** (or **Ask AI to read the screenshot**). This is the one endpoint that receives message text or a screenshot. Nothing is stored.
+
+**Screenshots:** send `image` as a JPEG/PNG/WebP data URL (the page shrinks it to at most 1280×2800, usually 25–150 KB; the server rejects over ~3 MB with `413`). The phone's own text reading can be sent as `text`, labelled to the model as possibly wrong. Vision models are used (Groq `qwen/qwen3.8-27b`, override with `GROQ_VISION_MODEL`; backup Workers AI `@cf/meta/llama-4-scout-17b-16e-instruct`), and the answer includes a `transcript` of what the model read. If the phone read nothing, the page shows only the AI option.
 
 ```json
 { "text": "buy a macbook brand new m1 pro for 600k", "lang": "en" }
@@ -550,7 +553,7 @@ Fallback only. It discards the content and redirects to `/?shared=failed`.
 | Principle | Implementation |
 |---|---|
 | **The message never leaves the device** | All text analysis runs in the browser (`public/js/engine`). The one exception is the **optional AI check**: it's opt-in per message, the button says exactly what it sends, and the text isn't stored. Groq and Cloudflare don't use it to train models. (Google Gemini's *free* tier was ruled out because Google may use free-tier content to improve its products and have humans review it.) |
-| **Screenshots never leave the device** | OCR runs in the browser with Tesseract.js (WebAssembly). |
+| **Screenshots stay on the device unless you ask** | OCR runs in the browser with Tesseract.js (WebAssembly). The picture is only sent if the person taps **Ask AI to read the screenshot**, and the button says so and suggests cropping private details first. |
 | **Minimal server input** | `/api/check-link` receives only the extracted links (maximum 5). |
 | **No storage of content** | Nothing about links is stored. `/api/log` stores only enums, rule ids and yes/no answers. No text, links, phone numbers, account numbers, IPs or identifiers. |
 | **Shared content stays local** | WhatsApp shares are intercepted by the service worker, held briefly in the browser cache, then deleted. The server fallback throws content away. |
@@ -734,6 +737,7 @@ npm run deploy:vercel
 | `URLHAUS_AUTH_KEY` | No | <https://auth.abuse.ch/> (free account) | |
 | `GROQ_API_KEY` | Recommended | <https://console.groq.com/keys> (free account) | Makes Groq the first AI provider, with its own free allowance. Neither Groq nor Cloudflare trains on the text. |
 | `GROQ_MODEL` | No | A Groq model id | Defaults to `openai/gpt-oss-120b` |
+| `GROQ_VISION_MODEL` | No | A Groq vision model id | Defaults to `qwen/qwen3.8-27b` (screenshots) |
 | `AI_MODEL` | No | Any Workers AI text model id | Defaults to Llama 3.3 70B |
 | `CF_ACCOUNT_ID`, `CF_AI_TOKEN` | Vercel only | Cloudflare dashboard → API Tokens (Workers AI permission) | Lets Vercel call Workers AI over REST. On Cloudflare the `[ai]` binding is used instead. |
 
@@ -817,7 +821,7 @@ Danger stays red (`#B42318`) on purpose, so it reads as "stop" at a glance.
 - **CheckAm can't verify senders, phone numbers or account owners.** It says so in every result.
 - **It can't yet search organisations' official announcements** to confirm a real programme. It points users to the official site instead.
 - **The official organisations list is small (59)** and must be maintained by hand.
-- **OCR quality varies** with blurry or cropped screenshots. Users are asked to fix the text before re-checking.
+- **OCR quality varies** with blurry or cropped screenshots. Users can fix the text, or ask the AI to read the picture itself. Vision models can also misread tiny digits in very low-quality images.
 - **Google Safe Browsing's free tier is non-commercial.** Paid business products would need Google Web Risk.
 - **Pidgin copy needs review by native speakers** before a wide launch.
 - **Anonymous stats aren't stored on Vercel** (Cloudflare D1 only).

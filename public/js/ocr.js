@@ -41,6 +41,25 @@ function getWorker() {
   return workerPromise;
 }
 
+/**
+ * Shrink a screenshot to a JPEG data URL for the AI (only when the person
+ * asks). Width up to 1280 and height up to 2800 keeps chat text legible while
+ * the upload stays around 0.3–0.8 MB on mobile data.
+ */
+export async function imageToDataUrl(file) {
+  const img = await decodeImage(file);
+  const scale = Math.min(1, 1280 / img.width, 2800 / img.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.drawImage(img, 0, 0, canvas.width, canvas.height);
+  img.close?.();
+  return canvas.toDataURL('image/jpeg', 0.82);
+}
+
 /** Decode with createImageBitmap, falling back to an <img> (handles formats like HEIC on Safari). */
 async function decodeImage(file) {
   try {

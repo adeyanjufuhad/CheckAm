@@ -18,6 +18,8 @@ const state = {
   report: null,
   online: undefined,
   ai: null,
+  image: null, // the screenshot File, kept only in memory for the optional AI read
+  imageData: null, // its shrunk JPEG data URL, made on first AI request
   runId: 0,
   deferredInstall: null,
 };
@@ -121,14 +123,21 @@ async function runCheck(text, source) {
   state.text = trimmed;
   state.source = source;
   state.ai = null;
-  const urls = extractUrls(trimmed);
-  state.online = urls.length ? { status: 'pending' } : undefined;
+  if (source !== 'image') {
+    state.image = null;
+    state.imageData = null;
+  }
+  state.online = extractUrls(trimmed).length ? { status: 'pending' } : undefined;
   state.report = analyze(trimmed, { source, online: state.online });
   if (source !== 'image') setStatus('');
   render({ scroll: true });
 
   log({ type: 'check', level: state.report.level, category: state.report.category, source, rules: state.report.meta.ruleIds });
+  checkLinksOnline(runId);
+}
 
+async function checkLinksOnline(runId) {
+  const urls = extractUrls(state.text);
   if (!urls.length) return;
   let online;
   try {
@@ -158,6 +167,14 @@ async function runCheck(text, source) {
 function render({ scroll = false } = {}) {
   const r = state.report;
   resultEl.replaceChildren();
+  if (!r && state.image) {
+    // The phone couldn't read the screenshot: offer the AI, which can see it.
+    resultEl.hidden = false;
+    resultEl.className = 'result level-unclear';
+    resultEl.append(renderAI());
+    if (scroll) resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
   if (!r) {
     resultEl.hidden = true;
     return;
@@ -255,18 +272,51 @@ function displayLevel() {
   return LEVEL_RANK[ai] > LEVEL_RANK[base] ? ai : base;
 }
 
+// Words in common between two readings of the same screenshot (0..1).
+function similarity(a, b) {
+  const words = (s) => new Set(String(s).toLowerCase().match(/[a-z0-9₦]{2,}/g) || []);
+  const A = words(a);
+  const B = words(b);
+  if (!A.size || !B.size) return 0;
+  let shared = 0;
+  for (const w of A) if (B.has(w)) shared++;
+  return shared / (A.size + B.size - shared);
+}
+
+// If the AI read the screenshot clearly better than the phone did, show its
+// reading and re-run CheckAm's own checks on it (the AI result stays).
+function useAITranscript(transcript, runId) {
+  const phoneText = state.text || '';
+  const muchBetter = !phoneText || similarity(phoneText, transcript) < 0.6 || phoneText.length < transcript.length * 0.6;
+  if (!muchBetter) return false;
+  input.value = transcript;
+  state.text = transcript;
+  state.online = extractUrls(transcript).length ? { status: 'pending' } : undefined;
+  state.report = analyze(transcript, { source: 'image', online: state.online });
+  checkLinksOnline(runId);
+  return true;
+}
+
 async function askAI() {
   const runId = state.runId;
   state.ai = { status: 'loading' };
   render();
   try {
+    let image;
+    if (state.image) {
+      if (!state.imageData) {
+        const { imageToDataUrl } = await import('./ocr.js');
+        state.imageData = await imageToDataUrl(state.image);
+      }
+      image = state.imageData;
+    }
     const controller = new AbortController();
     // The server may try several AI models in turn, so allow a little longer.
     const timer = setTimeout(() => controller.abort(), 55000);
     const res = await fetch('/api/ai-check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: state.text, lang: state.lang }),
+      body: JSON.stringify({ text: state.text, lang: state.lang, image }),
       signal: controller.signal,
     });
     clearTimeout(timer);
@@ -279,8 +329,14 @@ async function askAI() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const result = await res.json();
     if (runId !== state.runId) return;
-    state.ai = { status: 'done', result };
-    log({ type: 'ai', level: result.verdict, category: state.report.category, source: state.source, rules: state.report.meta.ruleIds });
+    const reread = Boolean(state.image && result.transcript && useAITranscript(result.transcript, runId));
+    state.ai = { status: 'done', result, reread };
+    // An unreadable screenshot the AI couldn't read either: nothing to check.
+    if (!state.report) {
+      state.ai = { status: 'failed' };
+    } else {
+      log({ type: 'ai', level: result.verdict, category: state.report.category, source: state.source, rules: state.report.meta.ruleIds });
+    }
   } catch {
     if (runId !== state.runId) return;
     state.ai = { status: 'failed' };
@@ -290,15 +346,19 @@ async function askAI() {
 
 function renderAI() {
   const ai = state.ai;
-  // Nothing to add when the rules already found strong signs.
-  if (!ai && state.report.level === 'danger') return null;
+  const level = state.report?.level;
+  // Nothing to add when the rules already found strong signs in a typed message.
+  // For a screenshot the AI can still help: it reads the picture itself.
+  if (!ai && level === 'danger' && !state.image) return null;
   const block = el('section', { class: 'block ai-block' });
+  const img = Boolean(state.image);
 
   if (!ai) {
     block.append(
-      el('h3', {}, el('span', { class: 'ai-badge' }, 'AI'), t('aiAskTitle')),
-      el('p', { class: 'muted' }, t('aiAskNote')),
-      el('button', { type: 'button', class: `btn ${state.report.level === 'unclear' ? 'btn-primary' : 'btn-secondary'} ai-ask`, onclick: askAI }, t('aiAskBtn')),
+      el('h3', {}, el('span', { class: 'ai-badge' }, 'AI'), t(img ? 'aiAskTitleImage' : 'aiAskTitle')),
+      !state.report && img ? el('p', {}, t('ocrNoTextAi')) : null,
+      el('p', { class: 'muted' }, t(img ? 'aiAskNoteImage' : 'aiAskNote')),
+      el('button', { type: 'button', class: `btn ${!level || level === 'unclear' ? 'btn-primary' : 'btn-secondary'} ai-ask`, onclick: askAI }, t(img ? 'aiAskBtnImage' : 'aiAskBtn')),
     );
   } else if (ai.status === 'loading') {
     block.append(el('p', { class: 'pending' }, el('span', { class: 'spinner', 'aria-hidden': 'true' }), t('aiLoading')));
@@ -312,6 +372,7 @@ function renderAI() {
   } else {
     const { signs, checks } = ai.result;
     block.append(el('h3', {}, el('span', { class: 'ai-badge' }, 'AI'), t('aiTitle')));
+    if (ai.reread) block.append(el('p', { class: 'ai-reread' }, t('aiReread')));
     if (signs.length) {
       block.append(el('ul', { class: 'findings' }, signs.map((s) => el('li', { class: 'finding sev-medium' },
         el('strong', { class: 'finding-title' }, s.title),
@@ -434,6 +495,8 @@ function resetForm() {
   resetFeedback();
   state.report = null;
   state.ai = null;
+  state.image = null;
+  state.imageData = null;
   state.runId++;
   input.value = '';
   $('#preview').hidden = true;
@@ -469,15 +532,37 @@ async function handleImage(file, extraText = '') {
     });
     const combined = [extraText, text].filter(Boolean).join('\n');
     if (!combined.trim()) {
-      setStatus(t('ocrNoText'), 'error');
+      showImageOnly(file);
       return;
     }
     input.value = combined;
     setStatus(t('ocrDone'));
+    state.image = file;
+    state.imageData = null;
     runCheck(combined, 'image');
   } catch (err) {
-    setStatus(t(err && err.message === 'unsupported-image' ? 'ocrUnsupported' : 'ocrFailed'), 'error');
+    if (err && err.message === 'unsupported-image') {
+      setStatus(t('ocrUnsupported'), 'error');
+      return;
+    }
+    // The phone's reader failed (e.g. couldn't download): the AI can still look at it.
+    showImageOnly(file);
   }
+}
+
+// No text read on the phone: offer the AI, which looks at the picture itself.
+function showImageOnly(file) {
+  resetFeedback();
+  state.runId++;
+  state.text = '';
+  state.source = 'image';
+  state.report = null;
+  state.online = undefined;
+  state.ai = null;
+  state.image = file;
+  state.imageData = null;
+  setStatus('');
+  render({ scroll: true });
 }
 
 // ---------- Shares from other apps (installed app) ----------

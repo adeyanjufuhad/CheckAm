@@ -1,54 +1,66 @@
 /* CheckAm: mobile-first, readable for older eyes, no web fonts (data is expensive).
+   Palette: #000000 black, #14213D navy, #FCA311 orange, #E5E5E5 grey, #FFFFFF white.
+   Danger stays red: it has to read as "stop" at a glance, whatever the brand.
    No green anywhere in results: CheckAm never signals "safe". */
 
 :root {
-  --bg: #f6f4ee;
-  --surface: #ffffff;
-  --surface-2: #f0ede4;
-  --ink: #16181d;
-  --muted: #555b66;
-  --line: #e1ddd2;
-  --brand: #1f2a44;
-  --brand-ink: #ffffff;
-  --accent: #e8a317;
-  --focus: #2f6fed;
+  --black: #000000;
+  --navy: #14213d;
+  --orange: #fca311;
+  --grey: #e5e5e5;
+  --white: #ffffff;
+
+  --bg: var(--grey);
+  --surface: var(--white);
+  --surface-2: var(--grey);
+  --ink: var(--black);
+  --muted: #3d4a66;
+  --line: #d4d4d4;
+  --brand: var(--navy);
+  --brand-ink: var(--white);
+  --accent: var(--orange);
+  --accent-ink: var(--black);
+  --topbar: var(--navy);
+  --topbar-ink: var(--white);
+  --focus: var(--navy);
 
   --danger: #b42318;
   --danger-bg: #fdecea;
   --danger-line: #f5c2bd;
-  --caution: #a44a05;
-  --caution-bg: #fff4de;
-  --caution-line: #f6d9a3;
-  --unclear: #344054;
-  --unclear-bg: #eef1f5;
-  --unclear-line: #d4dae3;
+  --caution: #7a4a00;
+  --caution-bg: #fff1d6;
+  --caution-line: var(--orange);
+  --unclear: var(--navy);
+  --unclear-bg: #eef0f4;
+  --unclear-line: #c4cad6;
 
   --radius: 14px;
-  --shadow: 0 1px 2px rgba(22, 24, 29, .06), 0 4px 16px rgba(22, 24, 29, .05);
+  --shadow: 0 1px 2px rgba(20, 33, 61, .08), 0 4px 16px rgba(20, 33, 61, .06);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #111318;
-    --surface: #1a1d24;
-    --surface-2: #232730;
-    --ink: #eceef2;
-    --muted: #a3a9b5;
-    --line: #2e333d;
-    --brand: #c9d3ea;
-    --brand-ink: #111318;
-    --accent: #f0b43c;
-    --focus: #7aa5ff;
+    --bg: var(--black);
+    --surface: var(--navy);
+    --surface-2: #1d2d52;
+    --ink: var(--white);
+    --muted: #b9c0cf;
+    --line: #2b3c63;
+    --brand: var(--grey);
+    --brand-ink: var(--black);
+    --topbar: var(--navy);
+    --topbar-ink: var(--white);
     --danger: #ff8a80;
-    --danger-bg: #2c1716;
-    --danger-line: #5a2622;
-    --caution: #ffc266;
-    --caution-bg: #2a2114;
-    --caution-line: #56411c;
-    --unclear: #c3cad6;
-    --unclear-bg: #1f232b;
-    --unclear-line: #363c48;
+    --danger-bg: #2c1113;
+    --danger-line: #6b2622;
+    --focus: var(--orange);
+    --caution: var(--orange);
+    --caution-bg: #2a1f0b;
+    --caution-line: #8a5a0a;
+    --unclear: var(--grey);
+    --unclear-bg: #1d2d52;
+    --unclear-line: #2b3c63;
     --shadow: none;
     color-scheme: dark;
   }
@@ -91,8 +103,8 @@ body {
 /* ---------- Top bar ---------- */
 
 .topbar {
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  background: var(--topbar);
+  border-bottom: 1px solid var(--topbar);
   position: sticky;
   top: 0;
   z-index: 5;
@@ -108,7 +120,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  color: var(--ink);
+  color: var(--topbar-ink);
   text-decoration: none;
   font-weight: 800;
   font-size: 1.2rem;
@@ -118,14 +130,14 @@ body {
 
 .lang {
   display: inline-flex;
-  background: var(--surface-2);
+  background: rgba(255, 255, 255, .12);
   border-radius: 999px;
   padding: 3px;
 }
 .lang button {
   border: 0;
   background: transparent;
-  color: var(--muted);
+  color: var(--topbar-ink);
   font: inherit;
   font-size: .9rem;
   font-weight: 600;
@@ -135,8 +147,8 @@ body {
   min-height: 36px;
 }
 .lang button[aria-pressed="true"] {
-  background: var(--brand);
-  color: var(--brand-ink);
+  background: var(--orange);
+  color: var(--black);
 }
 
 /* ---------- Hero + form ---------- */
@@ -166,7 +178,7 @@ textarea {
   resize: vertical;
   border: 1.5px solid var(--line);
   border-radius: 10px;
-  background: var(--bg);
+  background: var(--surface);
   color: var(--ink);
   font: inherit;
   padding: 12px 14px;
@@ -231,7 +243,7 @@ textarea:focus { border-color: var(--focus); outline: none; box-shadow: 0 0 0 3p
 .btn-primary:hover { filter: brightness(1.12); }
 .btn-secondary { background: var(--surface); color: var(--ink); border-color: var(--line); }
 .btn-secondary:hover { background: var(--surface-2); }
-.btn-share { background: var(--accent); color: #1b1300; }
+.btn-share { background: var(--accent); color: var(--accent-ink); }
 .btn-share:hover { filter: brightness(1.05); }
 .btn-ghost { background: transparent; color: var(--muted); }
 .btn-ghost:hover { color: var(--ink); }
@@ -317,7 +329,7 @@ textarea:focus { border-color: var(--focus); outline: none; box-shadow: 0 0 0 3p
 }
 .finding.sev-critical { border-left-color: var(--danger); }
 .finding.sev-high { border-left-color: var(--danger); }
-.finding.sev-medium { border-left-color: var(--caution); }
+.finding.sev-medium { border-left-color: var(--orange); }
 .finding.sev-low { border-left-color: var(--unclear-line); }
 .finding-title { display: block; margin-bottom: 2px; }
 .finding p { margin: 0; }
@@ -384,7 +396,7 @@ textarea:focus { border-color: var(--focus); outline: none; box-shadow: 0 0 0 3p
 
 .howto { background: var(--surface-2); }
 .howto ol { padding-left: 1.3em; display: grid; gap: 8px; }
-.howto li::marker { font-weight: 800; color: var(--brand); }
+.howto li::marker { font-weight: 800; color: var(--ink); }
 
 .actions {
   display: flex;

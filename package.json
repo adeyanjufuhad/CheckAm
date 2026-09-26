@@ -7,9 +7,10 @@
   "scripts": {
     "dev": "wrangler pages dev public --port 8788",
     "test": "node --test \"tests/**/*.test.js\"",
-    "deploy": "wrangler pages deploy public --project-name checkam",
+    "deploy": "wrangler pages deploy public --project-name checkam --branch CheckAm",
     "db:init": "wrangler d1 execute checkam --remote --file=schema.sql",
-    "db:stats": "wrangler d1 execute checkam --remote --command \"SELECT type, level, helpful, COUNT(*) AS n FROM events GROUP BY type, level, helpful ORDER BY n DESC\""
+    "db:stats": "wrangler d1 execute checkam --remote --command \"SELECT type, level, helpful, COUNT(*) AS n FROM events GROUP BY type, level, helpful ORDER BY n DESC\"",
+    "deploy:vercel": "vercel deploy --prod"
   },
   "devDependencies": {
     "wrangler": "^4.141.0"

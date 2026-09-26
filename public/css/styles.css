@@ -465,3 +465,15 @@ textarea:focus { border-color: var(--focus); outline: none; box-shadow: 0 0 0 3p
 }
 .doc .updated { color: var(--muted); font-size: .92rem; }
 .back { display: inline-block; margin-top: 16px; color: var(--brand); font-weight: 600; }
+
+/* ---------- Screenshot drop ---------- */
+
+.checker.dragging {
+  outline: 3px dashed var(--orange);
+  outline-offset: 4px;
+}
+.image-hint {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: .88rem;
+}

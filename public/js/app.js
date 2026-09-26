@@ -345,8 +345,19 @@ function resetForm() {
 
 // ---------- Screenshots ----------
 
+const IMAGE_NAME_RE = /.(png|jpe?g|webp|gif|bmp|heic|heif|avif)$/i;
+
+// Some phones hand over photos with an empty type (e.g. HEIC), so also trust the file name.
+function looksLikeImage(file) {
+  return !!file && (file.type.startsWith('image/') || (!file.type && IMAGE_NAME_RE.test(file.name || '')));
+}
+
 async function handleImage(file, extraText = '') {
-  if (!file || !file.type.startsWith('image/')) return;
+  if (!file) return;
+  if (!looksLikeImage(file)) {
+    setStatus(t('ocrNotImage'), 'error');
+    return;
+  }
   const preview = $('#preview');
   preview.src = URL.createObjectURL(file);
   preview.hidden = false;
@@ -364,8 +375,8 @@ async function handleImage(file, extraText = '') {
     input.value = combined;
     setStatus(t('ocrDone'));
     runCheck(combined, 'image');
-  } catch {
-    setStatus(t('ocrFailed'), 'error');
+  } catch (err) {
+    setStatus(t(err && err.message === 'unsupported-image' ? 'ocrUnsupported' : 'ocrFailed'), 'error');
   }
 }
 
@@ -410,12 +421,32 @@ fileInput.addEventListener('change', () => {
   fileInput.value = '';
 });
 
-input.addEventListener('paste', (e) => {
-  const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
+// Paste an image anywhere on the page (not only inside the text box).
+document.addEventListener('paste', (e) => {
+  const item = [...(e.clipboardData?.items || [])].find((i) => i.kind === 'file' && i.type.startsWith('image/'));
   if (item) {
     e.preventDefault();
     handleImage(item.getAsFile());
   }
+});
+
+// Drag a screenshot onto the page. Without this the browser would open the
+// image itself and leave CheckAm.
+const draggingFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+window.addEventListener('dragover', (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  form.classList.add('dragging');
+});
+window.addEventListener('dragleave', (e) => {
+  if (!e.relatedTarget) form.classList.remove('dragging');
+});
+window.addEventListener('drop', (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  form.classList.remove('dragging');
+  const file = [...e.dataTransfer.files].find(looksLikeImage) || e.dataTransfer.files[0];
+  handleImage(file);
 });
 
 for (const btn of document.querySelectorAll('[data-example]')) {

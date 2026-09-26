@@ -41,12 +41,31 @@ function getWorker() {
   return workerPromise;
 }
 
+/** Decode with createImageBitmap, falling back to an <img> (handles formats like HEIC on Safari). */
+async function decodeImage(file) {
+  try {
+    return await createImageBitmap(file);
+  } catch {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      return img;
+    } catch {
+      throw new Error('unsupported-image');
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+}
+
 /**
  * Screenshots are often dark mode (light text on dark), which OCR reads badly,
  * and chat bubbles are small. Grayscale, invert if dark, upscale small images.
  */
 async function prepareImage(file) {
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await decodeImage(file);
   const scale = Math.min(2, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
   const w = Math.round(bitmap.width * scale);
   const h = Math.round(bitmap.height * scale);

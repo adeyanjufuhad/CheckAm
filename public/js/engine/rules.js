@@ -74,6 +74,22 @@ const CONTEXT_FEE_RE = new RegExp([
   String.raw`\bpay\b[^.!?\n]{0,50}\bto\s+(?:get|complete)\b`,
 ].join('|'));
 
+const RECEIPT_MARKERS = [
+  /\btransaction (?:successful|receipt|details|reference|date|type|status|id)\b/,
+  /\b(?:transfer|payment) (?:successful|receipt|completed)\b/,
+  /\bsession id\b/,
+  /\bbeneficiary (?:name|bank|account|details)\b/,
+  /\bsender(?:'s)? (?:name|bank|account|details)\b/,
+  /\bnarration\b/,
+  /\b(?:ref(?:erence)?|txn|trans(?:action)?) ?(?:no|number|id|ref)\b/,
+  /\b(?:share|download) receipt\b/,
+  /\bcredit alert\b/,
+  /\b(?:recipient|receiver)(?:'s)? (?:name|bank|account)\b/,
+];
+const AMOUNT_RE = new RegExp(AMOUNT);
+const GADGET_RE = /\b(?:iphone|macbook|mac book|ipad|imac|apple watch|airpods|ps5|ps4|playstation|xbox|nintendo switch|samsung (?:galaxy )?(?:s|z|note) ?\d+|galaxy (?:s|z|note) ?\d+|pixel \d+|laptop|elitebook|thinkpad|dell xps|gaming pc|rtx ?\d{4}|drone|starlink|generator|inverter)\b/;
+const SELLING_RE = /\b(?:buy|sell|selling|for sale|going for|available|in stock|brand new|uk used|tokunbo|sealed|price|cheap|promo|discount|slashed|dm|order|clearance sale|pay (?:before|first))\b/;
+
 export const MONEY_REQUEST_RE = new RegExp([
   String.raw`\b(?:send|transfer|borrow|lend|loan|help)\b[^.!?\n]{0,30}\b(?:me|us)\b[^.!?\n]{0,40}(?:money|cash|${AMOUNT})`,
   String.raw`\babeg\b[^.!?\n]{0,30}\b(?:send|transfer|help|borrow)\b`,
@@ -216,6 +232,25 @@ export const TEXT_RULES = [
     test: ({ text }) => firstMatch(text, [
       /\b(?:next of kin|inheritance|unclaimed (?:funds?|money|package|consignment)|beneficiary of (?:the |a )?(?:fund|estate|will)|diplomat(?:ic)? (?:agent|bag)|consignment box|compensation fund|trunk box|foreign beneficiary|late (?:client|husband|father) (?:left|deposited))\b/,
     ]),
+  },
+  {
+    // A transfer receipt or alert screenshot. Fake receipt apps make perfect
+    // copies, so the only proof is the person's own bank balance.
+    id: 'payment-receipt',
+    severity: 'medium',
+    test: ({ text }) => {
+      const hits = RECEIPT_MARKERS.filter((re) => re.test(text));
+      return hits.length >= 3 ? firstMatch(text, hits) : null;
+    },
+  },
+  {
+    // "MacBook M1 Pro brand new for 600k". We can't know market prices, but an
+    // expensive gadget being sold with a price is exactly where fake vendors
+    // operate, so prompt the person to compare before paying.
+    id: 'gadget-deal',
+    severity: 'medium',
+    test: ({ text }) => GADGET_RE.test(text) && SELLING_RE.test(text) && AMOUNT_RE.test(text)
+      && firstMatch(text, [GADGET_RE]),
   },
   {
     id: 'generic-greeting',

@@ -172,6 +172,20 @@ export const FINDINGS = {
       pcm: 'Na the old 419 script be this. No stranger money dey wait for you anywhere.',
     },
   },
+  'payment-receipt': {
+    title: { en: 'Payment receipt: receipts can be faked', pcm: 'Payment receipt: dem fit fake receipt' },
+    why: {
+      en: 'Fake receipt apps make bank receipts and alerts that look perfect. A receipt or screenshot proves nothing until the money shows in your own bank balance.',
+      pcm: 'Fake receipt app dey make bank receipt and alert wey resemble the real one well well. Receipt or screenshot no prove anything until the money show for your own bank balance.',
+    },
+  },
+  'gadget-deal': {
+    title: { en: 'Expensive gadget for sale: check the real price', pcm: 'Dem dey sell costly gadget: check the real price' },
+    why: {
+      en: 'Fake sellers advertise phones, laptops and consoles far below the market price to make you pay quickly. Compare the price with trusted shops. If it\'s much cheaper, assume it\'s a scam. Never pay before you see and test the item.',
+      pcm: 'Fake sellers dey advertise phone, laptop and PS far below the real price so you go rush pay. Compare the price with trusted shops. If e too cheap, take am say na scam. No pay before you see and test the thing.',
+    },
+  },
   'generic-greeting': {
     title: { en: 'Generic greeting like "Dear customer"', pcm: 'Dem no call your name, na "Dear customer"' },
     why: {
@@ -420,6 +434,10 @@ export const UNKNOWNS = {
     en: 'When {domain} was registered. Its registry didn\'t tell us.',
     pcm: 'When dem register {domain}. Dem no gree show us.',
   },
+  'receipt-real': {
+    en: 'Whether this payment really happened. Only your own bank balance can confirm it.',
+    pcm: 'Whether this payment really happen. Na only your own bank balance fit confirm am.',
+  },
   'ocr-errors': {
     en: 'Whether the text was read correctly from the screenshot. Check the text box for mistakes.',
     pcm: 'Whether we read the screenshot correct. Check the text box make sure say e correct.',
@@ -510,6 +528,18 @@ export const ADVICE = {
   'reversal-bank': {
     en: 'If money really arrived by mistake, tell the sender to contact their bank. Banks handle reversals.',
     pcm: 'If money really enter by mistake, tell the person make e contact im bank. Na bank dey handle reversal.',
+  },
+  'receipt-check-app': {
+    en: "Open your own bank app and confirm the money is in your balance. Don't rely on the receipt, an SMS or the sender's word.",
+    pcm: 'Open your own bank app and confirm say the money don enter your balance. No trust receipt, SMS or wetin the person talk.',
+  },
+  'receipt-no-release': {
+    en: `Don't hand over goods, services or "change" until you see the money in your balance.`,
+    pcm: 'No release goods, service or "change" until you see the money for your balance.',
+  },
+  'receipt-session-id': {
+    en: 'Still unsure? Ask your bank to trace the transfer using the Session ID or reference on the receipt.',
+    pcm: 'You still no sure? Ask your bank make dem trace the transfer with the Session ID or reference wey dey the receipt.',
   },
   'shop-pay-on-delivery': {
     en: 'Prefer pay-on-delivery or a trusted marketplace over paying a stranger upfront.',

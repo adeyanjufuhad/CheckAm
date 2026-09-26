@@ -24,6 +24,17 @@ const SCAMS = [
   ['parcel customs', 'DHL: Your parcel is held at customs. Pay the customs clearance fee of ₦4,500 at https://dhl-ng-delivery.top/pay to release it.', 'danger', ['delivery-hold', 'lookalike-domain']],
   ['wrong transfer', 'Hello, I mistakenly transferred 50,000 naira to your account. Please kindly reverse it to me, I beg you.', 'caution', ['wrong-transfer']],
   ['OTP in pidgin', 'Oga abeg, I send code to your phone by mistake. Abeg send me the code make I use am.', 'danger', ['credential-request']],
+  ['too-cheap gadget', 'buy a macbook brand new m1 pro for 600k', 'caution', ['gadget-deal']],
+  ['bank transfer receipt (OCR)', `Transaction Successful
+N450,000.00
+Transaction Type Transfer
+Sender Name CHIDI OKAFOR
+Beneficiary Name AMAKA STORES
+Beneficiary Bank GTBank
+Account Number 0123456789
+Narration Payment for iPhone 15
+Transaction Reference TRF2026092614523001
+Session ID 100004260926145230019283`, 'caution', ['payment-receipt']],
   ['free data promo', 'MTN FREE 20GB DATA! You have been selected as a lucky winner. Claim your prize now: bit.ly/mtn-free-data', 'caution', ['too-good-prize', 'shortened-link']],
 ];
 
@@ -45,6 +56,7 @@ const ORDINARY = [
   ['official link', 'Check your JAMB result on https://www.jamb.gov.ng/efacility'],
   ['school fee notice', 'Reminder: the post-UTME application fee is ₦2,000. Pay on the university portal.'],
   ['congratulations', 'Congratulations on your wedding! Wishing you both happiness.'],
+  ['bought a phone', 'I finally bought a new iPhone yesterday, it cost me 900k but I love it'],
 ];
 
 for (const [name, text] of ORDINARY) {
@@ -53,6 +65,14 @@ for (const [name, text] of ORDINARY) {
     assert.notEqual(r.level, 'danger', `"${name}" should not be danger; got ${ids(r).join(', ')}`);
   });
 }
+
+test('a receipt gets receipt advice, not "pay into this account" or bank-website advice', () => {
+  const r = analyze('Transfer Successful. Sender Name: Chidi. Beneficiary Name: Amaka. Session ID 10000426. Amount N50,000');
+  assert.equal(r.category, 'receipt');
+  assert.ok(!ids(r).includes('personal-account-payment'));
+  assert.ok(r.advice.some((a) => a.id === 'receipt-check-app'));
+  assert.ok(r.unknowns.some((u) => u.id === 'receipt-real'));
+});
 
 test('ordinary messages with no signals are "unclear", never "safe"', () => {
   const r = analyze('Hey, are we still meeting at 5pm?');

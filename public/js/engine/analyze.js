@@ -26,6 +26,7 @@ const CATEGORY_ADVICE = {
   investment: ['invest-sec', 'invest-too-good'],
   delivery: ['delivery-track', 'delivery-expecting'],
   reversal: ['reversal-check-balance', 'reversal-bank'],
+  receipt: ['receipt-check-app', 'receipt-no-release', 'receipt-session-id'],
   shopping: ['shop-pay-on-delivery', 'shop-reviews'],
   loan: ['loan-fccpc'],
   general: [],
@@ -51,6 +52,7 @@ function detectCategory(ids, flags) {
   const has = (...xs) => xs.some((x) => ids.has(x));
   if (has('new-number-money', 'new-number', 'emergency-money')) return 'family';
   if (has('wrong-transfer')) return 'reversal';
+  if (has('payment-receipt')) return 'receipt';
   if (has('investment-scheme', 'easy-money')) return 'investment';
   if (has('job-red-flags') || flags.job) return 'job';
   if (has('grant-offer') || flags.grant) return 'government';
@@ -58,7 +60,7 @@ function detectCategory(ids, flags) {
   if (has('delivery-hold') || flags.delivery) return 'delivery';
   if (has('too-good-prize')) return 'prize';
   if (has('credential-request', 'id-request', 'threat-urgency') || flags.bank) return 'bank';
-  if (flags.shopping) return 'shopping';
+  if (has('gadget-deal') || flags.shopping) return 'shopping';
   return 'general';
 }
 
@@ -178,7 +180,7 @@ export function analyze(rawText, { source = 'text', online } = {}) {
   const hasAccountNumber = NUBAN_RE.test(text);
   if ((hasAccountNumber || /\baccount (?:number|no\.?|details)\b/.test(text))
       && /\b(?:pay|send|transfer|deposit)\b/.test(text)
-      && !fired['wrong-transfer'] && !fired['unusual-payment']) {
+      && !fired['wrong-transfer'] && !fired['unusual-payment'] && !fired['payment-receipt']) {
     out.findings.push({ id: 'personal-account-payment', severity: 'medium', vars: {}, evidence: (text.match(NUBAN_RE) || text.match(/\baccount (?:number|no\.?|details)\b/))[0] });
   }
 
@@ -233,12 +235,13 @@ export function analyze(rawText, { source = 'text', online } = {}) {
   // 3. What we can't know
   out.unknowns.unshift({ id: 'sender-identity', vars: {} });
   if (PHONE_RE.test(text)) out.unknowns.push({ id: 'phone-owner', vars: {} });
-  if (hasAccountNumber) out.unknowns.push({ id: 'account-owner', vars: {} });
+  if (hasAccountNumber && !fired['payment-receipt']) out.unknowns.push({ id: 'account-owner', vars: {} });
   if (emails.length) out.unknowns.push({ id: 'email-owner', vars: {} });
   if (flags.grant || flags.job || flags.prize) {
     if (impersonable.length) out.unknowns.push({ id: 'official-announcement', vars: { org: impersonable[0].name } });
     else out.unknowns.push({ id: 'official-announcement-generic', vars: {} });
   }
+  if (fired['payment-receipt']) out.unknowns.push({ id: 'receipt-real', vars: {} });
   if (source === 'image') out.unknowns.push({ id: 'ocr-errors', vars: {} });
 
   // 4. Score
@@ -258,7 +261,7 @@ export function analyze(rawText, { source = 'text', online } = {}) {
   for (const id of categoryAdvice) advice.push({ id, vars: {} });
   // In family/reversal scams a bank name is where the money goes, not who is
   // pretending to write, so "visit their website" would be useless advice.
-  const orgForAdvice = category === 'family' || category === 'reversal' ? null
+  const orgForAdvice = ['family', 'reversal', 'receipt'].includes(category) ? null
     : impersonable[0] || findings.map((f) => f.vars.orgId && ORGS.find((o) => o.id === f.vars.orgId)).find(Boolean);
   if (orgForAdvice) advice.push({ id: 'org-official-site', vars: { org: orgForAdvice.name, official: orgForAdvice.domains[0] } });
   advice.push({ id: 'independent-channel', vars: {} });

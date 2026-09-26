@@ -17,6 +17,7 @@ const state = {
   source: 'text',
   report: null,
   online: undefined,
+  ai: null,
   runId: 0,
   deferredInstall: null,
 };
@@ -117,6 +118,7 @@ async function runCheck(text, source) {
   const runId = ++state.runId;
   state.text = trimmed;
   state.source = source;
+  state.ai = null;
   const urls = extractUrls(trimmed);
   state.online = urls.length ? { status: 'pending' } : undefined;
   state.report = analyze(trimmed, { source, online: state.online });
@@ -159,14 +161,16 @@ function render({ scroll = false } = {}) {
     return;
   }
   resultEl.hidden = false;
-  resultEl.className = `result level-${r.level}`;
+  const level = displayLevel();
+  resultEl.className = `result level-${level}`;
 
   resultEl.append(
     el('div', { class: 'verdict', role: 'status' },
-      svgIcon(r.level),
+      svgIcon(level),
       el('div', {},
-        el('h2', { class: 'verdict-title', tabindex: '-1', id: 'verdict-title' }, pick(LEVELS[r.level].headline)),
-        el('p', { class: 'verdict-sub' }, pick(LEVELS[r.level].sub)),
+        el('h2', { class: 'verdict-title', tabindex: '-1', id: 'verdict-title' }, pick(LEVELS[level].headline)),
+        el('p', { class: 'verdict-sub' }, pick(LEVELS[level].sub)),
+        level !== r.level ? el('p', { class: 'verdict-raised' }, t('aiRaised')) : null,
       ),
     ),
   );
@@ -192,6 +196,9 @@ function render({ scroll = false } = {}) {
     }
   }
   resultEl.append(suspicious);
+
+  const aiBlock = renderAI();
+  if (aiBlock) resultEl.append(aiBlock);
 
   // What CheckAm checked
   const checkedItems = r.facts.map((f) => el('li', { class: `fact tone-${f.tone}` }, svgIcon(f.tone === 'good' ? 'check' : 'dot'), el('span', {}, fmt(pick(FACTS[f.id]), f.vars))));
@@ -231,6 +238,82 @@ function render({ scroll = false } = {}) {
   }
 }
 
+// ---------- Optional AI check ----------
+// Only on request: it's the one feature that sends the message text anywhere.
+// The AI can raise the level shown, never lower it.
+
+const LEVEL_RANK = { unclear: 0, caution: 1, danger: 2 };
+
+function displayLevel() {
+  const base = state.report.level;
+  const ai = state.ai?.status === 'done' ? state.ai.result.verdict : 'unclear';
+  return LEVEL_RANK[ai] > LEVEL_RANK[base] ? ai : base;
+}
+
+async function askAI() {
+  const runId = state.runId;
+  state.ai = { status: 'loading' };
+  render();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    const res = await fetch('/api/ai-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: state.text, lang: state.lang }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const result = await res.json();
+    if (runId !== state.runId) return;
+    state.ai = { status: 'done', result };
+    log({ type: 'ai', level: result.verdict, category: state.report.category, source: state.source, rules: state.report.meta.ruleIds });
+  } catch {
+    if (runId !== state.runId) return;
+    state.ai = { status: 'failed' };
+  }
+  render();
+}
+
+function renderAI() {
+  const ai = state.ai;
+  // Nothing to add when the rules already found strong signs.
+  if (!ai && state.report.level === 'danger') return null;
+  const block = el('section', { class: 'block ai-block' });
+
+  if (!ai) {
+    block.append(
+      el('h3', {}, el('span', { class: 'ai-badge' }, 'AI'), t('aiAskTitle')),
+      el('p', { class: 'muted' }, t('aiAskNote')),
+      el('button', { type: 'button', class: 'btn btn-secondary ai-ask', onclick: askAI }, t('aiAskBtn')),
+    );
+  } else if (ai.status === 'loading') {
+    block.append(el('p', { class: 'pending' }, el('span', { class: 'spinner', 'aria-hidden': 'true' }), t('aiLoading')));
+  } else if (ai.status === 'failed') {
+    block.append(
+      el('p', { class: 'muted' }, t('aiFailed')),
+      el('button', { type: 'button', class: 'btn btn-secondary ai-ask', onclick: askAI }, t('aiRetry')),
+    );
+  } else {
+    const { signs, checks } = ai.result;
+    block.append(el('h3', {}, el('span', { class: 'ai-badge' }, 'AI'), t('aiTitle')));
+    if (signs.length) {
+      block.append(el('ul', { class: 'findings' }, signs.map((s) => el('li', { class: 'finding sev-medium' },
+        el('strong', { class: 'finding-title' }, s.title),
+        el('p', {}, s.why),
+      ))));
+    } else {
+      block.append(el('p', { class: 'muted' }, t('aiNone')));
+    }
+    if (checks.length) {
+      block.append(el('p', { class: 'ai-sub' }, t('aiChecks')), el('ul', { class: 'ai-checks' }, checks.map((c) => el('li', {}, c))));
+    }
+    block.append(el('p', { class: 'ai-disclaimer' }, t('aiDisclaimer')));
+  }
+  return block;
+}
+
 // Three quick questions per result. Answers are sent once, when all three are
 // done, or earlier if the person moves on (new check, leaves the page), so a
 // half-answered survey still counts.
@@ -241,7 +324,7 @@ function flushFeedback() {
   if (feedback.sent || !Object.keys(feedback.answers).length || !state.report) return;
   feedback.sent = true;
   const r = state.report;
-  log({ type: 'feedback', level: r.level, category: r.category, source: state.source, rules: r.meta.ruleIds, ...feedback.answers });
+  log({ type: 'feedback', level: displayLevel(), category: r.category, source: state.source, rules: r.meta.ruleIds, ...feedback.answers });
 }
 
 function resetFeedback() {
@@ -296,11 +379,13 @@ function renderFeedback() {
 
 function shareText() {
   const r = state.report;
-  const lines = [`${t('shareHeader')}: ${pick(LEVELS[r.level].headline)}`];
-  const top = r.findings.filter((f) => f.severity !== 'low').slice(0, 3);
-  if (top.length) {
+  const lines = [`${t('shareHeader')}: ${pick(LEVELS[displayLevel()].headline)}`];
+  const top = r.findings.filter((f) => f.severity !== 'low').slice(0, 3).map((f) => fmt(pick(FINDINGS[f.id].title), f.vars));
+  const aiSigns = state.ai?.status === 'done' ? state.ai.result.signs.map((s) => `${s.title} (AI)`) : [];
+  const reasons = [...top, ...aiSigns].slice(0, 4);
+  if (reasons.length) {
     lines.push('', t('shareWhy'));
-    for (const f of top) lines.push(`• ${fmt(pick(FINDINGS[f.id].title), f.vars)}`);
+    for (const reason of reasons) lines.push(`• ${reason}`);
   }
   lines.push('', t('shareDo'));
   for (const a of r.advice.slice(0, 3)) lines.push(`• ${fmt(pick(ADVICE[a.id]), a.vars)}`);
@@ -334,6 +419,7 @@ async function copyResult(btn) {
 function resetForm() {
   resetFeedback();
   state.report = null;
+  state.ai = null;
   state.runId++;
   input.value = '';
   $('#preview').hidden = true;

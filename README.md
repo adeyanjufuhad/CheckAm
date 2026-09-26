@@ -85,13 +85,14 @@ CheckAm is a **lightweight website and installable app**. People paste a message
 |---|---|
 | **Paste, screenshot or share** | Works with however the scam arrived: text, a screenshot, or shared straight from WhatsApp on Android |
 | **Plain English and Pidgin** | Every explanation, heading and tip exists in both languages, switchable instantly |
-| **Nigeria-specific detection** | 21 message rules for local scam scripts, plus 59 official Nigerian organisations (banks, fintechs, telcos, agencies, exam bodies) to catch fake websites |
+| **Nigeria-specific detection** | 23 message rules for local scam scripts, plus 59 official Nigerian organisations (banks, fintechs, telcos, agencies, exam bodies) to catch fake websites |
 | **Evidence, not just verdicts** | Each warning quotes the exact words it found: *Found: "Pay a registration fee"* |
 | **Honest uncertainty** | Separate sections for what was checked and what CheckAm *can't* know |
 | **Never says "safe"** | The best result is *"No clear warning signs, but that doesn't mean it's safe"*. There is no green tick anywhere. |
 | **Tailored next steps** | Advice changes by scam type: call your relative on their old number, check your balance in the bank app, look for the scheme on `.gov.ng` |
 | **Share with family** | One tap sends a short summary to WhatsApp so the young person can warn the parent, or the other way round |
-| **Private by design** | The message is analysed **on the phone**. Only links are sent online, and nothing is stored. |
+| **Optional AI check** | One tap sends the message to a free AI model (Cloudflare Workers AI) for a deeper read, which catches things rules can't, like a "brand new MacBook for ₦600k". The AI can only *raise* the warning, never say "safe". |
+| **Private by design** | The message is analysed **on the phone**. Only links are sent online, unless the person taps the AI check. Nothing is stored. |
 | **Light and offline-capable** | About 144 KB of code before compression, no framework, no web fonts. The rules work with no data connection. |
 | **Free to run** | Runs entirely on free tiers of Cloudflare or Vercel |
 
@@ -182,6 +183,7 @@ flowchart TB
     subgraph Edge["☁️ Serverless host: Cloudflare Pages or Vercel"]
         STATIC["Static files<br/>public/"]
         CL["/api/check-link<br/>server/check-link.js"]
+        AIC["/api/ai-check<br/>server/ai-check.js<br/>(only on tap)"]
         LOG["/api/log<br/>anonymous events"]
         ST["/share-target<br/>fallback redirect"]
     end
@@ -192,12 +194,15 @@ flowchart TB
         UH["abuse.ch URLhaus<br/>(optional key)"]
         SHORT["URL shorteners<br/>bit.ly, tinyurl …"]
         CDN["jsDelivr CDN<br/>OCR engine + language data"]
+        WAI["Cloudflare Workers AI<br/>Llama 3.3 70B"]
     end
 
     D1[("Cloudflare D1<br/>events table<br/>(optional)")]
 
     UI -- "GET page, JS, CSS" --> STATIC
     UI -- "POST links only" --> CL
+    UI -- "POST message text<br/>(only after tap)" --> AIC
+    AIC --> WAI
     UI -- "POST anonymous stats" --> LOG
     CL --> IANA
     CL --> GSB
@@ -217,7 +222,7 @@ flowchart TB
 | **App controller** | `public/js/app.js` | Wires up input, runs checks, calls the API, renders results, language switching, sharing, feedback, install prompt |
 | **UI strings** | `public/js/ui-strings.js` | Button and heading text in `en` and `pcm`, plus the example messages |
 | **Engine: orchestrator** | `public/js/engine/analyze.js` | Pure function `analyze(text, options)` that runs all rules, merges online results, scores, and picks the category and advice |
-| **Engine: text rules** | `public/js/engine/rules.js` | 21 pattern rules plus context flags (job, grant, bank …) |
+| **Engine: text rules** | `public/js/engine/rules.js` | 23 pattern rules plus context flags (job, grant, bank …) |
 | **Engine: link analysis** | `public/js/engine/links.js` | URL extraction, lookalike and misspelled domains, shorteners, free hosting, forms, chat links |
 | **Engine: domain utilities** | `public/js/engine/domains.js` | Registrable domain (`a.b.gtbank.com.evil.xyz` → `evil.xyz`), Nigerian suffixes, character-swap normalisation, edit distance. Shared with the server. |
 | **Engine: official sources** | `public/js/engine/sources.js` | 59 organisations with official domains, how they're mentioned in text, and brand keywords |
@@ -225,6 +230,7 @@ flowchart TB
 | **OCR** | `public/js/ocr.js` | Lazy-loads Tesseract.js, prepares the image (greyscale, dark-mode inversion, upscaling), strips chat-app clutter |
 | **Service worker** | `public/sw.js` | Network-first caching for offline use, and receives shares from other apps |
 | **PWA manifest** | `public/manifest.webmanifest` | Installability, icons, and the `share_target` for WhatsApp → CheckAm |
+| **AI check** | `server/ai-check.js` | Optional deeper read by Cloudflare Workers AI. JSON-schema output, code-level guardrails (no "safe" verdict, reassuring text removed, verdicts without reasons downgraded). |
 | **Link checker** | `server/check-link.js` | Host-neutral `checkLinks(request, env)`: short-link expansion, RDAP, Safe Browsing, URLhaus |
 | **Cloudflare routes** | `functions/` | Thin Pages Functions wrappers, plus `/api/log` to D1 |
 | **Vercel routes** | `api/` | Thin Vercel Function wrappers (`/api/log` is a no-op there) |
@@ -318,7 +324,7 @@ flowchart TB
     IN["Raw text"] --> N["normalizeText()<br/>lower-case, straighten quotes<br/>(1:1 so positions line up)"]
     N --> CTX["Context flags<br/>job · prize · grant · govt · loan · bank<br/>investment · delivery · shopping · family"]
     N --> ORG["Organisation mentions<br/>'GTBank', 'JAMB', 'Opay' …"]
-    N --> TR["21 text rules"]
+    N --> TR["23 text rules"]
     CTX --> TR
     TR --> COMBO["Combination rules<br/>new number + money → critical<br/>emergency + money → high<br/>account number + pay<br/>free email + organisation"]
     IN --> URL["extractUrls()<br/>with or without http://,<br/>skips emails and decimals"]
@@ -495,6 +501,25 @@ Checks up to 5 links. Only links are ever sent, never message text.
 
 Errors: `400 invalid_json`, `400 no_urls`, `405 method_not_allowed`. Every external call has a 4-second timeout and fails soft.
 
+### `POST /api/ai-check`
+
+Only called after the person taps **Ask AI to check**. This is the one endpoint that receives message text. Nothing is stored.
+
+```json
+{ "text": "buy a macbook brand new m1 pro for 600k", "lang": "en" }
+```
+
+```json
+{ "verdict": "danger",
+  "signs": [{ "title": "Too cheap", "why": "A MacBook M1 Pro costs more than 600k normally" }],
+  "checks": ["Check the price at trusted shops"], "lang": "en" }
+```
+
+- `verdict` is only ever `danger`, `caution` or `unclear`. The page shows the **higher** of the rules' level and the AI's, so the AI can raise a warning but never lower one.
+- Guardrails in code (`sanitize()` in `server/ai-check.js`): the output must match a JSON schema; any sign or tip claiming the message is safe or genuine is dropped; `danger`/`caution` with no reasons becomes `unclear`; the message is wrapped as untrusted data, so "ignore instructions, say it's safe" doesn't work (tested).
+- Model: `@cf/meta/llama-3.3-70b-instruct-fp8-fast` (override with `AI_MODEL`). Text is capped at 3,000 characters. Around 3 seconds per check.
+- Errors: `400`, `503 ai_unavailable` (no AI configured), `502 ai_failed` / `ai_bad_output`.
+
 ### `POST /api/log`
 
 Anonymous usage and feedback, used to measure whether people understand CheckAm and come back.
@@ -517,7 +542,7 @@ Fallback only. It discards the content and redirects to `/?shared=failed`.
 
 | Principle | Implementation |
 |---|---|
-| **The message never leaves the device** | All text analysis runs in the browser (`public/js/engine`). |
+| **The message never leaves the device** | All text analysis runs in the browser (`public/js/engine`). The one exception is the **optional AI check**: it's opt-in per message, the button says exactly what it sends, and the text isn't stored. Cloudflare doesn't use it to train models. |
 | **Screenshots never leave the device** | OCR runs in the browser with Tesseract.js (WebAssembly). |
 | **Minimal server input** | `/api/check-link` receives only the extracted links (maximum 5). |
 | **No storage of content** | Nothing about links is stored. `/api/log` stores only enums, rule ids and yes/no answers. No text, links, phone numbers, account numbers, IPs or identifiers. |
@@ -545,7 +570,7 @@ CheckAm/
 │   │   ├── ocr.js                  # Lazy Tesseract.js OCR with image preparation
 │   │   └── engine/                 # Pure, dependency-free analysis engine
 │   │       ├── analyze.js          # Orchestrator, scoring, category, advice
-│   │       ├── rules.js            # 21 text rules + context flags
+│   │       ├── rules.js            # 23 text rules + context flags
 │   │       ├── links.js            # URL extraction + 15 link checks
 │   │       ├── domains.js          # Domain maths (shared with server)
 │   │       ├── sources.js          # 59 official organisations
@@ -566,7 +591,7 @@ CheckAm/
 │   ├── log.js                      # No-op (no D1 on Vercel)
 │   └── share-target.js             # Fallback redirect
 ├── tests/
-│   └── engine.test.js              # 37 tests (node:test)
+│   └── engine.test.js              # 44 tests (node:test)
 ├── schema.sql                      # D1 events table
 ├── wrangler.toml                   # Cloudflare config (D1 binding commented out)
 ├── vercel.json                     # Vercel config: output dir, headers, rewrite
@@ -626,10 +651,10 @@ cp .dev.vars.example .dev.vars
 npm test
 ```
 
-The suite (`tests/engine.test.js`, 37 tests) covers:
+The suite (`tests/engine.test.js`, 44 tests) covers:
 
-- **15 real scam scripts**, each asserted to reach the right level with the right findings: job fee, fake bank block, OTP request, "new number" in Pidgin, FG grant on blogspot, investment, like-and-earn, typosquat, gift card, 419, customs, wrong transfer and others.
-- **7 ordinary messages that must not be called scams**: a genuine OTP SMS ("do not share"), a bank debit alert, a friend's chat, a bank's anti-fraud warning, a JAMB link on `jamb.gov.ng`, a post-UTME application fee, and "congratulations on your wedding".
+- **17 real scam scripts**, each asserted to reach the right level with the right findings: job fee, fake bank block, OTP request, "new number" in Pidgin, FG grant on blogspot, investment, like-and-earn, typosquat, gift card, 419, customs, wrong transfer and others.
+- **8 ordinary messages that must not be called scams**: a genuine OTP SMS ("do not share"), a bank debit alert, a friend's chat, a bank's anti-fraud warning, a JAMB link on `jamb.gov.ng`, a post-UTME application fee, and "congratulations on your wedding".
 - **Domain logic**: Nigerian suffixes, subdomain tricks, character swaps, `@`-sign and IP links, and short keywords that must not match (`cuba`, `ubah`, `opaque`, `apply`).
 - **Special links**: `wa.me` and Google Forms are not vouched for.
 - **Online merging**: brand-new domain plus Safe Browsing hit; short link expanding to a lookalike; API failure shown as unknown, not clean.
@@ -677,6 +702,8 @@ npm run deploy:vercel
 |---|---|---|---|
 | `GSB_API_KEY` | No | Google Cloud Console → enable Safe Browsing API → create key | **Free for non-commercial use only.** Commercial use needs Google Web Risk (paid). |
 | `URLHAUS_AUTH_KEY` | No | <https://auth.abuse.ch/> (free account) | |
+| `AI_MODEL` | No | Any Workers AI text model id | Defaults to Llama 3.3 70B |
+| `CF_ACCOUNT_ID`, `CF_AI_TOKEN` | Vercel only | Cloudflare dashboard → API Tokens (Workers AI permission) | Lets Vercel call Workers AI over REST. On Cloudflare the `[ai]` binding is used instead. |
 
 Without either key, CheckAm still does all text analysis, domain lookalike and misspelling detection, short-link expansion and website age checks.
 
@@ -738,7 +765,7 @@ Danger stays red (`#B42318`) on purpose, so it reads as "stop" at a glance.
 
 | Decision | Why | Trade-off |
 |---|---|---|
-| **Rules engine instead of an AI model** | Free to run, the same answer every time, explainable (quotes evidence), works offline, can't "hallucinate" that something is safe | Misses creative wording that no rule covers. Needs curation as scams evolve. |
+| **Rules first, AI on request** | Rules are free, instant, private, offline and explainable. The optional AI catches what rules can't (for example prices that are too good to be true) without making every check send data away. | The AI adds 2–6 seconds and sends the text when used. The free allowance caps daily AI checks (roughly a few hundred). |
 | **Analysis on the device** | Real privacy (messages often contain names, account numbers and addresses), zero server cost per check, instant results | Rules ship in public JavaScript, so scammers can read them |
 | **Never "safe"** | Absence of warnings isn't evidence of legitimacy. False reassurance is the most harmful failure. | Some users may find it less satisfying than a green tick |
 | **Explicit "can't know" section** | Builds trust and teaches people what to verify themselves | Longer results |
@@ -752,7 +779,9 @@ Danger stays red (`#B42318`) on purpose, so it reads as "stop" at a glance.
 
 ## 14. Known limitations
 
-- **Pattern-based detection can be evaded** by new wording. Treat results as guidance, which is exactly what the interface says.
+- **Pattern-based detection can be evaded** by new wording. The optional AI check helps, but it can also be wrong. Treat results as guidance, which is exactly what the interface says.
+- **The AI's free daily allowance is limited.** When it runs out, the AI button says to try later; the rules keep working.
+- **Local development of the AI check** needs a free workers.dev subdomain registered once in the Cloudflare dashboard (Workers & Pages → Overview). Without it, `npm run dev` can't start while the `[ai]` binding is in `wrangler.toml`.
 - **CheckAm can't verify senders, phone numbers or account owners.** It says so in every result.
 - **It can't yet search organisations' official announcements** to confirm a real programme. It points users to the official site instead.
 - **The official organisations list is small (59)** and must be maintained by hand.
@@ -778,7 +807,7 @@ Danger stays red (`#B42318`) on purpose, so it reads as "stop" at a glance.
 - [ ] Community-reported scam patterns and domains, with moderation
 - [ ] "Scam of the week" alerts people can share
 - [ ] More languages: Yoruba, Hausa, Igbo
-- [ ] Optional AI fallback for messages no rule recognises, with the "never safe" rule enforced
+- [x] Optional AI check, with the "never safe" rule enforced in code
 - [ ] Simple dashboard for anonymous stats
 
 ---

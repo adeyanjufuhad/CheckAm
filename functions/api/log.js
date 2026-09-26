@@ -9,7 +9,7 @@
 const LEVELS = new Set(['danger', 'caution', 'unclear']);
 const LANGS = new Set(['en', 'pcm']);
 const SOURCES = new Set(['text', 'image', 'share']);
-const TYPES = new Set(['check', 'feedback']);
+const TYPES = new Set(['check', 'feedback', 'ai']);
 const YES_NO = new Set(['yes', 'no']);
 const CORRECT = new Set(['right', 'was-scam', 'was-genuine', 'unsure']);
 const ID_RE = /^[a-z0-9-]{1,40}$/;

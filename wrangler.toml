@@ -8,3 +8,7 @@ compatibility_date = "2025-09-01"
 binding = "DB"
 database_name = "checkam"
 database_id = "121b1659-0d6a-4c76-96a4-34627d26124c"
+
+# Cloudflare Workers AI for the optional "Ask AI" check (free daily allowance).
+[ai]
+binding = "AI"

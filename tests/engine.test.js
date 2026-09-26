@@ -195,3 +195,23 @@ test('contact config builds WhatsApp and email links', async () => {
   assert.match(whatsappLink('hi'), /^https:\/\/wa\.me\/\d+\?text=hi$/);
   assert.match(emailLink('s', 'b'), /^mailto:[^?]+@[^?]+\?subject=s&body=b$/);
 });
+
+// ---------- AI output guardrails ----------
+
+test('AI output: no "safe" verdict, reassuring text dropped, unexplained verdicts downgraded', async () => {
+  const { sanitize } = await import('../server/ai-check.js');
+  assert.equal(sanitize({ verdict: 'safe', signs: [], checks: [] }).verdict, 'unclear');
+  assert.equal(sanitize({ verdict: 'danger', signs: [], checks: [] }).verdict, 'unclear');
+  const r = sanitize(JSON.stringify({
+    verdict: 'caution',
+    signs: [
+      { title: 'Price far too low', why: 'A new M1 Pro MacBook costs much more than 600k.' },
+      { title: 'Looks fine', why: 'This seller is legit and the message is safe.' },
+    ],
+    checks: ['This is genuine, go ahead.', 'Compare the price at trusted shops.'],
+  }));
+  assert.equal(r.verdict, 'caution');
+  assert.deepEqual(r.signs.map((s) => s.title), ['Price far too low']);
+  assert.deepEqual(r.checks, ['Compare the price at trusted shops.']);
+  assert.equal(sanitize('not json at all'), null);
+});

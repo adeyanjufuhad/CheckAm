@@ -4,7 +4,7 @@
 //  2. Share target: when the installed app receives a share from WhatsApp etc.,
 //     the POST is caught here, so the message never reaches the server.
 
-const CACHE = 'checkam-shell-v5';
+const CACHE = 'checkam-shell-v6';
 const SHELL = [
   '/',
   '/css/styles.css',

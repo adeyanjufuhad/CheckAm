@@ -16,6 +16,10 @@ const URL_RE = new RegExp(
 // Words that show up in phishing links and would be odd on a random website.
 const SENSITIVE_WORDS = /(login|log-in|signin|sign-in|verify|verification|validate|update|secure|unlock|unblock|reactivat|bvn|nin-|otp|kyc|password|account|wallet|claim|reward|bonus|refund)/i;
 
+// Stricter list for the website's own name ("bvnupdate-ng.com"), where words like
+// "account" would also match honest sites such as accounting firms.
+const SENSITIVE_DOMAIN_WORDS = /(bvn|nin-|otp|verify|verification|kyc|unblock|reactivat|login|signin|secure-|-secure|update-|-update)/i;
+
 // For short brand keywords (opay, uba, mtn…), what can follow them inside a fake
 // domain token: "opayverify", "mtnpromo", "uba2024". Stops "cuba" or "ubah" matching.
 const PHISHY_SUFFIX = /^(\d+|ng|nigeria|verify|verification|secure|login|online|support|help|care|promo|grant|bonus|reward|update|bank|app|portal|service|alert|customer|account|free|gift|loan|pay|wallet|data|recharge|official|team|desk|center|centre|unlock|reset|win|plc|mobile|web|net|hq)/;
@@ -153,7 +157,8 @@ export function analyzeLink(raw) {
       add('typosquat-domain', 'critical', { org: typo.org.name, official: typo.official, orgId: typo.org.id });
     }
     if (RISKY_TLDS.has(tld)) add('risky-tld', 'low', { tld });
-    if (SENSITIVE_WORDS.test(host.replace(registrable, '') + url.pathname + url.search)) add('sensitive-path', 'medium');
+    if (SENSITIVE_WORDS.test(host.replace(registrable, '') + url.pathname + url.search)
+        || SENSITIVE_DOMAIN_WORDS.test(secondLevelLabel(registrable))) add('sensitive-path', 'medium');
     const extraLabels = host.split('.').length - registrable.split('.').length;
     if (extraLabels >= 3 && !platform) add('deep-subdomain', 'low');
   }

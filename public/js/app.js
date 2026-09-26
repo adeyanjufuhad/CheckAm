@@ -1,6 +1,6 @@
 import { analyze } from './engine/analyze.js';
 import { extractUrls } from './engine/links.js';
-import { LEVELS, FINDINGS, FACTS, UNKNOWNS, ADVICE, fmt } from './engine/copy.js';
+import { LEVELS, FINDINGS, FACTS, UNKNOWNS, ADVICE, fmt as fmtIn } from './engine/copy.js';
 import { UI, EXAMPLES } from './ui-strings.js';
 import { whatsappLink, emailLink } from './config.js';
 
@@ -56,6 +56,8 @@ function svgIcon(name) {
   return span;
 }
 
+// Variables like an item name come as { en, pcm }; fill them in the current language.
+const fmt = (str, vars) => fmtIn(str, vars, state.lang);
 const t = (key, vars) => fmt(UI[state.lang][key] ?? UI.en[key] ?? key, vars);
 const pick = (obj) => (obj ? obj[state.lang] ?? obj.en : '');
 
@@ -195,10 +197,13 @@ function render({ scroll = false } = {}) {
         : list);
     }
   }
-  resultEl.append(suspicious);
-
+  // When CheckAm isn't sure, the AI check is the most useful next step, so it
+  // goes first; otherwise it follows the rule-based findings.
   const aiBlock = renderAI();
-  if (aiBlock) resultEl.append(aiBlock);
+  const unsure = r.level === 'unclear';
+  if (aiBlock && unsure) resultEl.append(aiBlock);
+  resultEl.append(suspicious);
+  if (aiBlock && !unsure) resultEl.append(aiBlock);
 
   // What CheckAm checked
   const checkedItems = r.facts.map((f) => el('li', { class: `fact tone-${f.tone}` }, svgIcon(f.tone === 'good' ? 'check' : 'dot'), el('span', {}, fmt(pick(FACTS[f.id]), f.vars))));
@@ -286,7 +291,7 @@ function renderAI() {
     block.append(
       el('h3', {}, el('span', { class: 'ai-badge' }, 'AI'), t('aiAskTitle')),
       el('p', { class: 'muted' }, t('aiAskNote')),
-      el('button', { type: 'button', class: 'btn btn-secondary ai-ask', onclick: askAI }, t('aiAskBtn')),
+      el('button', { type: 'button', class: `btn ${state.report.level === 'unclear' ? 'btn-primary' : 'btn-secondary'} ai-ask`, onclick: askAI }, t('aiAskBtn')),
     );
   } else if (ai.status === 'loading') {
     block.append(el('p', { class: 'pending' }, el('span', { class: 'spinner', 'aria-hidden': 'true' }), t('aiLoading')));

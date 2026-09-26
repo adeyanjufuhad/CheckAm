@@ -28,9 +28,21 @@ const CATEGORY_ADVICE = {
   reversal: ['reversal-check-balance', 'reversal-bank'],
   receipt: ['receipt-check-app', 'receipt-no-release', 'receipt-session-id'],
   shopping: ['shop-pay-on-delivery', 'shop-reviews'],
+  property: ['land-docs', 'land-visit', 'land-lawyer'],
+  vehicle: ['car-inspect', 'shop-pay-on-delivery'],
+  exam: ['exam-official'],
+  recovery: ['recovery-free-help', 'invest-sec'],
+  donation: ['donation-verify'],
+  romance: ['romance-never-met', 'family-ask-others'],
   loan: ['loan-fccpc'],
-  general: [],
+  general: ['money-verify'],
 };
+
+const PROPERTY_ITEMS = new Set(['land', 'house']);
+// Here a bank or fintech name is where money goes, not who is writing, so
+// "visit their website" would be useless advice.
+const NO_ORG_ADVICE = new Set(['family', 'reversal', 'receipt', 'property', 'vehicle', 'shopping', 'romance', 'donation', 'recovery']);
+const MONEY_INVOLVED_RE = /(?:₦|\bngn\b|\bnaira\b|\b\d+(?:\.\d+)?\s?k\b|\b(?:pay|payment|send money|transfer|deposit|buy|sell|selling|sale|price|cost|fee|invest|loan|order)\b)/;
 
 const PHONE_RE = /(?:\+?234[\s-]?|\b0)[789][01]\d[\s-]?\d{3}[\s-]?\d{4}\b/;
 const NUBAN_RE = /(?<![\d+])\d{10}(?!\d)/;
@@ -48,14 +60,23 @@ function mentionedOrgs(text) {
   return ORG_MENTION_RES.filter(({ re }) => re.test(text)).map(({ org }) => org);
 }
 
-function detectCategory(ids, flags) {
+function detectCategory(ids, flags, findings) {
   const has = (...xs) => xs.some((x) => ids.has(x));
+  const cheap = findings.find((f) => f.id === 'too-cheap');
+  if (has('result-upgrade')) return 'exam';
+  if (has('recovery-scam')) return 'recovery';
+  if (has('romance-money')) return 'romance';
   if (has('new-number-money', 'new-number', 'emergency-money')) return 'family';
   if (has('wrong-transfer')) return 'reversal';
-  if (has('payment-receipt')) return 'receipt';
+  if (has('payment-receipt', 'release-goods')) return 'receipt';
+  if (cheap && PROPERTY_ITEMS.has(cheap.vars.itemId)) return 'property';
+  if ((cheap && cheap.vars.itemId === 'car') || has('customs-auction')) return 'vehicle';
+  if (cheap || has('pay-first')) return 'shopping';
+  if (has('donation-appeal')) return 'donation';
   if (has('investment-scheme', 'easy-money')) return 'investment';
   if (has('job-red-flags') || flags.job) return 'job';
   if (has('grant-offer') || flags.grant) return 'government';
+  if (flags.govt && has('upfront-fee', 'threat-urgency', 'chat-app-redirect')) return 'government';
   if (has('loan-offer')) return 'loan';
   if (has('delivery-hold') || flags.delivery) return 'delivery';
   if (has('too-good-prize')) return 'prize';
@@ -165,8 +186,8 @@ export function analyze(rawText, { source = 'text', online } = {}) {
     if (!hit) continue;
     fired[rule.id] = { ...hit, evidence: quote(hit) };
     if (rule.hidden) continue;
-    const severity = typeof rule.severity === 'function' ? rule.severity(ctx) : rule.severity;
-    out.findings.push({ id: rule.id, severity, vars: {}, evidence: fired[rule.id].evidence });
+    const severity = hit.severity || (typeof rule.severity === 'function' ? rule.severity(ctx) : rule.severity);
+    out.findings.push({ id: rule.id, severity, vars: hit.vars || {}, evidence: fired[rule.id].evidence });
   }
 
   const moneyRequest = MONEY_REQUEST_RE.exec(text);
@@ -175,6 +196,9 @@ export function analyze(rawText, { source = 'text', online } = {}) {
     out.findings.push({ id: 'new-number-money', severity: 'critical', vars: {}, evidence: `${fired['new-number'].evidence} … ${moneyRequest[0].trim()}` });
   } else if (fired.emergency && moneyRequest) {
     out.findings.push({ id: 'emergency-money', severity: 'high', vars: {}, evidence: `${fired.emergency.evidence} … ${moneyRequest[0].trim()}` });
+  }
+  if (fired.romance && moneyRequest) {
+    out.findings.push({ id: 'romance-money', severity: 'high', vars: {}, evidence: `${fired.romance.evidence} … ${moneyRequest[0].trim()}` });
   }
 
   const hasAccountNumber = NUBAN_RE.test(text);
@@ -250,8 +274,13 @@ export function analyze(rawText, { source = 'text', online } = {}) {
   const facts = dedupe(out.facts, (f) => `${f.id}|${f.vars.domain || ''}|${f.vars.to || ''}`);
   const unknowns = dedupe(out.unknowns, (u) => `${u.id}|${u.vars.domain || ''}`);
   const { level, score } = computeLevel(findings);
+  // Nothing matched but money is involved: say so plainly, without changing
+  // the level, so "no clear signs" is never read as "fine to pay".
+  if (level === 'unclear' && MONEY_INVOLVED_RE.test(text)) {
+    findings.push({ id: 'money-involved', severity: 'low', vars: {}, evidence: '' });
+  }
   const ids = new Set(findings.map((f) => f.id));
-  const category = detectCategory(ids, flags);
+  const category = detectCategory(ids, flags, findings);
 
   // 5. How to check
   const advice = [];
@@ -259,9 +288,7 @@ export function analyze(rawText, { source = 'text', online } = {}) {
   // Nothing alarming found: keep it to one relevant tip rather than a lecture.
   const categoryAdvice = level === 'unclear' ? CATEGORY_ADVICE[category].slice(0, 1) : CATEGORY_ADVICE[category];
   for (const id of categoryAdvice) advice.push({ id, vars: {} });
-  // In family/reversal scams a bank name is where the money goes, not who is
-  // pretending to write, so "visit their website" would be useless advice.
-  const orgForAdvice = ['family', 'reversal', 'receipt'].includes(category) ? null
+  const orgForAdvice = NO_ORG_ADVICE.has(category) ? null
     : impersonable[0] || findings.map((f) => f.vars.orgId && ORGS.find((o) => o.id === f.vars.orgId)).find(Boolean);
   if (orgForAdvice) advice.push({ id: 'org-official-site', vars: { org: orgForAdvice.name, official: orgForAdvice.domains[0] } });
   advice.push({ id: 'independent-channel', vars: {} });

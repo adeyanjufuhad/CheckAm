@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { analyze } from '../public/js/engine/analyze.js';
 import { analyzeLink, extractUrls } from '../public/js/engine/links.js';
 import { getRegistrableDomain } from '../public/js/engine/domains.js';
-import { FINDINGS, FACTS, UNKNOWNS, ADVICE } from '../public/js/engine/copy.js';
+import { FINDINGS, FACTS, UNKNOWNS, ADVICE, fmt } from '../public/js/engine/copy.js';
 
 const ids = (r) => r.findings.map((f) => f.id);
 
@@ -194,6 +194,34 @@ test('contact config builds WhatsApp and email links', async () => {
   const { whatsappLink, emailLink } = await import('../public/js/config.js');
   assert.match(whatsappLink('hi'), /^https:\/\/wa\.me\/\d+\?text=hi$/);
   assert.match(emailLink('s', 'b'), /^mailto:[^?]+@[^?]+\?subject=s&body=b$/);
+});
+
+// ---------- Prices ----------
+
+test('too-cheap: land, amounts in many formats, dollars ignored, realistic prices left alone', async () => {
+  const { parseAmounts, tooCheapOffer } = await import('../public/js/engine/prices.js');
+  assert.deepEqual(parseAmounts('for 10k naira'), [10000]);
+  assert.deepEqual(parseAmounts('n250,000 and 2.5 million naira'), [250000, 2500000]);
+  assert.deepEqual(parseAmounts('camry 2018 rx350 iphone 15'), []);
+  assert.deepEqual(parseAmounts('left $4.5 million'), []);
+  assert.equal(tooCheapOffer('buy plot of land in ogun state for 10k naira').severity, 'critical');
+  assert.equal(tooCheapOffer('plots in mowe going for 4 million per plot'), null);
+  assert.equal(tooCheapOffer('my iphone screen repair cost 40k'), null);
+});
+
+test('item names render in the chosen language', () => {
+  const r = analyze('buy plot of land in ogun state for 10k naira');
+  const f = r.findings.find((x) => x.id === 'too-cheap');
+  assert.equal(fmt(FINDINGS['too-cheap'].title.en, f.vars, 'en'), 'Price is far too low for a plot of land');
+  assert.equal(fmt(FINDINGS['too-cheap'].title.pcm, f.vars, 'pcm'), 'The price too cheap for one plot of land');
+  assert.equal(r.category, 'property');
+  assert.ok(r.advice.some((a) => a.id === 'land-docs'));
+});
+
+test('uncertain results say money is involved instead of looking all-clear', () => {
+  const r = analyze('generator for sale, call me');
+  assert.equal(r.level, 'unclear');
+  assert.ok(ids(r).includes('money-involved'));
 });
 
 // ---------- AI output guardrails ----------

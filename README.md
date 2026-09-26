@@ -85,10 +85,10 @@ CheckAm is a **lightweight website and installable app**. People paste a message
 |---|---|
 | **Paste, screenshot or share** | Works with however the scam arrived: text, a screenshot, or shared straight from WhatsApp on Android |
 | **Plain English and Pidgin** | Every explanation, heading and tip exists in both languages, switchable instantly |
-| **Nigeria-specific detection** | 23 message rules for local scam scripts, plus 59 official Nigerian organisations (banks, fintechs, telcos, agencies, exam bodies) to catch fake websites |
+| **Nigeria-specific detection** | 31 message rules for local scam scripts (including price checks for land, houses, cars and gadgets), plus 59 official Nigerian organisations (banks, fintechs, telcos, agencies, exam bodies) to catch fake websites |
 | **Evidence, not just verdicts** | Each warning quotes the exact words it found: *Found: "Pay a registration fee"* |
 | **Honest uncertainty** | Separate sections for what was checked and what CheckAm *can't* know |
-| **Never says "safe"** | The best result is *"No clear warning signs, but that doesn't mean it's safe"*. There is no green tick anywhere. |
+| **Never says "safe"** | The best result is *"We can't confirm this is safe"*, which points to the AI check. There is no green tick anywhere. When money is involved, it says so. |
 | **Tailored next steps** | Advice changes by scam type: call your relative on their old number, check your balance in the bank app, look for the scheme on `.gov.ng` |
 | **Share with family** | One tap sends a short summary to WhatsApp so the young person can warn the parent, or the other way round |
 | **Optional AI check** | One tap sends the message to a free AI model (Cloudflare Workers AI) for a deeper read, which catches things rules can't, like a "brand new MacBook for ₦600k". The AI can only *raise* the warning, never say "safe". |
@@ -133,7 +133,7 @@ CheckAm is a **lightweight website and installable app**. People paste a message
 |---|---|---|
 | 🔴 **Strong signs of a scam** | Don't act. Verify independently first. | Any *critical* signal, or a combined score of 6 or more |
 | 🟠 **Some warning signs** | Be careful and confirm through an official channel. | Score 2–5 |
-| ⚪ **No clear warning signs, but that doesn't mean it's safe** | CheckAm can't confirm it's genuine. | Score under 2 |
+| ⚪ **We can't confirm this is safe** | No known trick matched, which isn't proof it's real. The AI check is offered first. | Score under 2 |
 
 There is deliberately **no "safe" level**.
 
@@ -222,7 +222,7 @@ flowchart TB
 | **App controller** | `public/js/app.js` | Wires up input, runs checks, calls the API, renders results, language switching, sharing, feedback, install prompt |
 | **UI strings** | `public/js/ui-strings.js` | Button and heading text in `en` and `pcm`, plus the example messages |
 | **Engine: orchestrator** | `public/js/engine/analyze.js` | Pure function `analyze(text, options)` that runs all rules, merges online results, scores, and picks the category and advice |
-| **Engine: text rules** | `public/js/engine/rules.js` | 23 pattern rules plus context flags (job, grant, bank …) |
+| **Engine: text rules** | `public/js/engine/rules.js` | 31 pattern rules plus context flags (job, grant, bank, travel …) |
 | **Engine: link analysis** | `public/js/engine/links.js` | URL extraction, lookalike and misspelled domains, shorteners, free hosting, forms, chat links |
 | **Engine: domain utilities** | `public/js/engine/domains.js` | Registrable domain (`a.b.gtbank.com.evil.xyz` → `evil.xyz`), Nigerian suffixes, character-swap normalisation, edit distance. Shared with the server. |
 | **Engine: official sources** | `public/js/engine/sources.js` | 59 organisations with official domains, how they're mentioned in text, and brand keywords |
@@ -324,7 +324,7 @@ flowchart TB
     IN["Raw text"] --> N["normalizeText()<br/>lower-case, straighten quotes<br/>(1:1 so positions line up)"]
     N --> CTX["Context flags<br/>job · prize · grant · govt · loan · bank<br/>investment · delivery · shopping · family"]
     N --> ORG["Organisation mentions<br/>'GTBank', 'JAMB', 'Opay' …"]
-    N --> TR["23 text rules"]
+    N --> TR["31 text rules<br/>incl. price checks"]
     CTX --> TR
     TR --> COMBO["Combination rules<br/>new number + money → critical<br/>emergency + money → high<br/>account number + pay<br/>free email + organisation"]
     IN --> URL["extractUrls()<br/>with or without http://,<br/>skips emails and decimals"]
@@ -360,7 +360,7 @@ Each finding has a severity:
 any critical        → danger   "Strong signs of a scam"
 score ≥ 6           → danger
 2 ≤ score < 6       → caution  "Some warning signs"
-score < 2           → unclear  "No clear warning signs, but that doesn't mean it's safe"
+score < 2           → unclear  "We can't confirm this is safe" (+ "Money is involved" note when relevant)
 ```
 
 Low-severity findings are folded under *"Show N smaller signs"* when stronger ones exist, so the main reasons stay visible.
@@ -570,8 +570,9 @@ CheckAm/
 │   │   ├── ocr.js                  # Lazy Tesseract.js OCR with image preparation
 │   │   └── engine/                 # Pure, dependency-free analysis engine
 │   │       ├── analyze.js          # Orchestrator, scoring, category, advice
-│   │       ├── rules.js            # 23 text rules + context flags
+│   │       ├── rules.js            # 31 text rules + context flags
 │   │       ├── links.js            # URL extraction + 15 link checks
+│   │       ├── prices.js           # Naira amount parsing + minimum realistic prices
 │   │       ├── domains.js          # Domain maths (shared with server)
 │   │       ├── sources.js          # 59 official organisations
 │   │       └── copy.js             # All explanations in English + Pidgin
@@ -591,7 +592,8 @@ CheckAm/
 │   ├── log.js                      # No-op (no D1 on Vercel)
 │   └── share-target.js             # Fallback redirect
 ├── tests/
-│   └── engine.test.js              # 44 tests (node:test)
+│   ├── engine.test.js              # Engine, links, prices, AI guardrails, copy
+│   └── corpus.test.js              # 44 real-world scams + 9 ordinary look-alikes
 ├── schema.sql                      # D1 events table
 ├── wrangler.toml                   # Cloudflare config (D1 binding commented out)
 ├── vercel.json                     # Vercel config: output dir, headers, rewrite
@@ -651,7 +653,11 @@ cp .dev.vars.example .dev.vars
 npm test
 ```
 
-The suite (`tests/engine.test.js`, 44 tests) covers:
+100 tests in two files.
+
+**`tests/corpus.test.js`: the scam collection.** 44 real-world Nigerian scam messages across land and property, cars, gadgets, rent and hostel agents, jobs and visas, NYSC, banks and SIMs, fake alerts and receipts, grants and promos, JAMB/WAEC "upgrades", Ponzi and crypto, "recovery agents", parcels, loans, romance, charity and tickets. **Every scam must reach at least "Some warning signs"**, and 9 ordinary look-alikes (a family transfer, a realistic land visit, a phone purchase) must never be called a scam. When a tester reports a miss, add it here first, then fix the rules until it passes.
+
+**`tests/engine.test.js`** covers:
 
 - **17 real scam scripts**, each asserted to reach the right level with the right findings: job fee, fake bank block, OTP request, "new number" in Pidgin, FG grant on blogspot, investment, like-and-earn, typosquat, gift card, 419, customs, wrong transfer and others.
 - **8 ordinary messages that must not be called scams**: a genuine OTP SMS ("do not share"), a bank debit alert, a friend's chat, a bank's anti-fraud warning, a JAMB link on `jamb.gov.ng`, a post-UTME application fee, and "congratulations on your wedding".
@@ -661,6 +667,23 @@ The suite (`tests/engine.test.js`, 44 tests) covers:
 - **Copy completeness**: every id the engine can produce has both English and Pidgin text.
 
 > **Rule of thumb:** every new rule gets at least one scam it must catch *and* one ordinary message it must ignore.
+
+### Price checks (`public/js/engine/prices.js`)
+
+CheckAm reads naira amounts in many formats (`10k`, `₦250,000`, `N 5,000`, `2.5 million naira`) and ignores years, model numbers (`iPhone 15`, `RX350`) and dollar amounts. When a big-ticket item is **offered** below a deliberately low minimum price, it's flagged: *high* below the minimum, *critical* below a fifth of it.
+
+| Item | Minimum realistic price used |
+|---|---|
+| Plot of land | ₦300,000 |
+| House (duplex, bungalow…) | ₦5,000,000 |
+| Car | ₦1,500,000 |
+| Recent iPhone Pro | ₦500,000 |
+| iPhone | ₦100,000 |
+| MacBook | ₦350,000 |
+| PS5 | ₦250,000 |
+| Recent Samsung Galaxy S/Z | ₦300,000 |
+
+These are set well under genuine prices (September 2026), so honest offers aren't flagged. Purchases already made, repairs, rent and instalments are ignored. **Review them every 6 months**, because inflation makes stale minimums too low (CheckAm gets quieter, never wrongly louder).
 
 ---
 

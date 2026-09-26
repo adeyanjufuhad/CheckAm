@@ -22,10 +22,10 @@ export const LEVELS = {
     },
   },
   unclear: {
-    headline: { en: "No clear warning signs, but that doesn't mean it's safe", pcm: 'We no see clear scam sign, but e no mean say e safe' },
+    headline: { en: "We can't confirm this is safe", pcm: 'We no fit confirm say e safe' },
     sub: {
-      en: "CheckAm can't confirm this is genuine. If it asks for money or your details, verify it yourself first.",
-      pcm: 'CheckAm no fit confirm say e real. If dem ask for money or your details, confirm am by yourself first.',
+      en: "It didn't match the scam tricks CheckAm knows, but that is not proof it's real. Scammers keep inventing new ones. Before you pay or share anything, verify it yourself or ask the AI below.",
+      pcm: 'E no match the scam style wey CheckAm know, but e no be proof say e real. Scammers dey find new style every time. Before you pay or give anything, confirm am by yourself or ask the AI wey dey below.',
     },
   },
 };
@@ -170,6 +170,69 @@ export const FINDINGS = {
     why: {
       en: 'This is the classic 419 script. There is no stranger\'s fortune waiting for you.',
       pcm: 'Na the old 419 script be this. No stranger money dey wait for you anywhere.',
+    },
+  },
+  'too-cheap': {
+    title: { en: 'Price is far too low for {item}', pcm: 'The price too cheap for {item}' },
+    why: {
+      en: '{price} is far below what {item} costs in Nigeria (we\'d expect well over {floor}). Impossible prices are the bait in fake seller, land and car scams.',
+      pcm: '{price} too small for {item} for Naija (e suppose pass {floor} well well). Price wey no fit happen na the bait for fake seller, land and motor scam.',
+    },
+  },
+  'pay-first': {
+    title: { en: 'Wants payment before you see anything', pcm: 'Dem want make you pay before you see anything' },
+    why: {
+      en: 'Paying before you\'ve seen the item, room or land is how most online vendor and agent scams work. Once you pay, they disappear.',
+      pcm: 'To pay before you see the thing, room or land na how most online vendor and agent scam dey work. Once you pay, dem go disappear.',
+    },
+  },
+  'release-goods': {
+    title: { en: 'Says they\'ve paid and asks you to release goods', pcm: 'Dem say dem don pay, make you release the goods' },
+    why: {
+      en: 'Fake credit alerts and receipts are used to collect goods. Only release anything after the money shows in your own bank app balance.',
+      pcm: 'Dem dey use fake credit alert and receipt collect goods. Only release anything after the money show for your own bank app balance.',
+    },
+  },
+  'result-upgrade': {
+    title: { en: 'Offers to "upgrade" exam results', pcm: 'Dem say dem fit "upgrade" exam result' },
+    why: {
+      en: 'Nobody can change JAMB, WAEC or NECO results. These offers take your money, and results bodies can cancel results linked to fraud.',
+      pcm: 'Nobody fit change JAMB, WAEC or NECO result. Dem go just collect your money, and the exam body fit cancel result wey get fraud inside.',
+    },
+  },
+  'recovery-scam': {
+    title: { en: 'Offers to recover money you lost', pcm: 'Dem say dem fit recover money wey you lose' },
+    why: {
+      en: '"Recovery agents" target people who were already scammed and charge fees to get the money back. They never do.',
+      pcm: '"Recovery agent" dey target people wey don already fall for scam, dem go collect fee say dem go bring the money back. Dem no dey ever bring am.',
+    },
+  },
+  'customs-auction': {
+    title: { en: '"Customs auction" goods for sale', pcm: '"Customs auction" goods for sale' },
+    why: {
+      en: 'Fake "seized goods" and "customs auction" cars are a common bait. Sellers ask for clearing or delivery fees, then vanish.',
+      pcm: 'Fake "seized goods" and "customs auction" motor na common bait. Dem go ask for clearing or delivery fee, then dem go vanish.',
+    },
+  },
+  'donation-appeal': {
+    title: { en: 'Donation request to a personal account', pcm: 'Dem dey ask for donation enter personal account' },
+    why: {
+      en: 'Fake medical and charity appeals copy real stories and photos. Give only through verified hospitals, organisations or people you know.',
+      pcm: 'Fake hospital and charity appeal dey copy real story and picture. Only give through hospital, organisation or person wey you sure of.',
+    },
+  },
+  'romance-money': {
+    title: { en: 'Online partner asking for money', pcm: 'Online lover dey ask for money' },
+    why: {
+      en: 'Romance scammers build trust for weeks, then invent an emergency (customs, hospital, stranded) that needs your money.',
+      pcm: 'Romance scammer go build trust for weeks, then dem go cook emergency (customs, hospital, stranded) wey need your money.',
+    },
+  },
+  'money-involved': {
+    title: { en: 'Money is involved', pcm: 'Money dey inside this matter' },
+    why: {
+      en: 'CheckAm didn\'t match a known scam pattern, but most scams end with a payment. Confirm who you\'re dealing with and that the offer is real before you pay.',
+      pcm: 'CheckAm no see scam style wey e know, but most scam dey end with payment. Confirm who you dey deal with and say the offer real before you pay.',
     },
   },
   'payment-receipt': {
@@ -541,6 +604,42 @@ export const ADVICE = {
     en: 'Still unsure? Ask your bank to trace the transfer using the Session ID or reference on the receipt.',
     pcm: 'You still no sure? Ask your bank make dem trace the transfer with the Session ID or reference wey dey the receipt.',
   },
+  'land-docs': {
+    en: 'Ask for the survey plan and title documents (C of O or Governor\'s Consent) and search them at the state Lands Registry before paying anything.',
+    pcm: 'Ask for the survey plan and title document (C of O or Governor\'s Consent), then go check dem for the state Lands Registry before you pay anything.',
+  },
+  'land-visit': {
+    en: 'Visit the land yourself with a surveyor, and ask people in the area who really owns it.',
+    pcm: 'Go see the land by yourself with surveyor, and ask people wey dey that area who really get am.',
+  },
+  'land-lawyer': {
+    en: 'Use a property lawyer. Never pay a "deposit to secure" a plot you haven\'t verified.',
+    pcm: 'Use property lawyer. No ever pay "deposit to secure" plot wey you never verify.',
+  },
+  'car-inspect': {
+    en: 'See the car in person with a mechanic, check its papers, and pay only after inspection. Don\'t pay "clearing" or "delivery" fees upfront.',
+    pcm: 'Go see the motor with mechanic, check the papers, and pay only after you inspect am. No pay "clearing" or "delivery" fee first.',
+  },
+  'exam-official': {
+    en: 'Check results only on the official JAMB, WAEC or NECO website. No one can legally change them.',
+    pcm: 'Check result only for the real JAMB, WAEC or NECO website. Nobody fit change am legally.',
+  },
+  'recovery-free-help': {
+    en: 'Real help after a scam is free: report to your bank, the police and the EFCC (efcc.gov.ng). Anyone charging to "recover" your money is scamming you again.',
+    pcm: 'Correct help after scam na free: report to your bank, police and EFCC (efcc.gov.ng). Anybody wey dey charge you to "recover" money dey scam you again.',
+  },
+  'donation-verify': {
+    en: 'Donate through the hospital or a verified organisation, or confirm the story with people who know the family.',
+    pcm: 'Donate through the hospital or organisation wey you sure of, or confirm the story from people wey know the family.',
+  },
+  'romance-never-met': {
+    en: 'Never send money to someone you haven\'t met in person, however long you\'ve been talking.',
+    pcm: 'No ever send money give person wey you never meet face to face, no matter how long una don dey talk.',
+  },
+  'money-verify': {
+    en: 'Before paying anyone, confirm who they are through a channel you trust, and never pay for something you haven\'t seen.',
+    pcm: 'Before you pay anybody, confirm who dem be through place wey you trust, and no pay for wetin you never see.',
+  },
   'shop-pay-on-delivery': {
     en: 'Prefer pay-on-delivery or a trusted marketplace over paying a stranger upfront.',
     pcm: 'Better make you pay when the thing reach your hand, or use trusted market app, no pay stranger first.',
@@ -555,6 +654,11 @@ export const ADVICE = {
   },
 };
 
-export function fmt(str, vars = {}) {
-  return String(str).replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? String(vars[k]) : ''));
+// Variables can be plain strings or { en, pcm } pairs (e.g. an item name).
+export function fmt(str, vars = {}, lang = 'en') {
+  return String(str).replace(/\{(\w+)\}/g, (_, k) => {
+    const v = vars[k];
+    if (v === undefined || v === null) return '';
+    return typeof v === 'object' ? String(v[lang] ?? v.en ?? '') : String(v);
+  });
 }

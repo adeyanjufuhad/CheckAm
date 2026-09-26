@@ -45,7 +45,7 @@
         <li><strong>Messages you paste</strong> are checked on your own phone or computer. They are not sent to us or anyone else.</li>
         <li><strong>Screenshots</strong> are read on your device. The image is not uploaded. The first time you use a screenshot, your browser downloads the free reading tool (about 3 MB) from jsDelivr, a public file network, which sees an ordinary download request.</li>
         <li><strong>Links</strong> found in the message (up to 5) are sent to our server so we can check how old the website is, where a short link leads, and whether it's on known scam or malware lists. To do that, the website name or link is passed to domain registries and, where enabled, Google Safe Browsing and abuse.ch URLhaus. We don't store the links.</li>
-        <li><strong>“Ask AI to check” (only if you tap it)</strong> sends the message text to Cloudflare Workers AI, which runs the AI model that reads it. We don't store the message or the AI's answer, and Cloudflare doesn't use it to train AI models. If you don't tap the button, nothing is sent.</li>
+        <li><strong>“Ask AI to check” (only if you tap it)</strong> sends the message text to an AI service that reads it: Groq, or Cloudflare Workers AI if Groq is busy. We don't store the message or the AI's answer, and neither provider uses it to train AI models. If you don't tap the button, nothing is sent.</li>
         <li><strong>Messages shared from WhatsApp</strong> into the installed app are held briefly in your browser, then deleted as soon as they're checked.</li>
       </ul>
 
@@ -92,7 +92,7 @@
         <li><strong>Message wey you paste:</strong> we dey check am for your own phone or computer. E no dey go meet us or anybody.</li>
         <li><strong>Screenshot:</strong> we dey read am for your phone. The picture no dey upload. The first time you use screenshot, your browser go download the free reading tool (like 3 MB) from jsDelivr, one public file network, wey go see say you download am.</li>
         <li><strong>Link</strong> wey dey inside the message (up to 5): we dey send am to our server so we fit check how old the website be, where short link dey really go, and whether e dey known scam or virus list. To do am, the website name or link go reach domain registry and, if e dey on, Google Safe Browsing and abuse.ch URLhaus. We no dey keep the link.</li>
-        <li><strong>“Make AI check am” (only if you tap am):</strong> e go send the message text go Cloudflare Workers AI, wey dey run the AI wey go read am. We no dey keep the message or wetin AI talk, and Cloudflare no dey use am train AI. If you no tap the button, nothing go comot.</li>
+        <li><strong>“Make AI check am” (only if you tap am):</strong> e go send the message text go AI service wey go read am: Groq, or Cloudflare Workers AI if Groq busy. We no dey keep the message or wetin AI talk, and the two of dem no dey use am train AI. If you no tap the button, nothing go comot.</li>
         <li><strong>Message wey you share from WhatsApp</strong> enter the app: e go stay small for your browser, then e go delete once we check am.</li>
       </ul>
 

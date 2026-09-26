@@ -224,6 +224,75 @@ test('uncertain results say money is involved instead of looking all-clear', () 
   assert.ok(ids(r).includes('money-involved'));
 });
 
+// ---------- AI providers: retry and fallback ----------
+
+const aiRequest = (text) => new Request('http://x/api/ai-check', { method: 'POST', body: JSON.stringify({ text, lang: 'en' }) });
+const goodAnswer = { verdict: 'caution', signs: [{ title: 'Too cheap', why: 'The price is far too low.' }], checks: [] };
+
+async function quietly(fn) {
+  const original = console.error;
+  console.error = () => {};
+  try {
+    return await fn();
+  } finally {
+    console.error = original;
+  }
+}
+
+test('AI: a failed model falls back to the backup model', async () => {
+  const { aiCheck } = await import('../server/ai-check.js');
+  const calls = [];
+  const env = { AI: { run: async (model) => {
+    calls.push(model);
+    if (calls.length === 1) throw new Error('3040: Capacity temporarily exceeded');
+    return { response: goodAnswer };
+  } } };
+  const res = await quietly(() => aiCheck(aiRequest('land for 10k'), env));
+  assert.equal(res.status, 200);
+  assert.equal(calls.length, 2);
+  assert.notEqual(calls[0], calls[1]);
+});
+
+test('AI: every provider out of free allowance gives a clear "limit" error', async () => {
+  const { aiCheck } = await import('../server/ai-check.js');
+  const env = { AI: { run: async () => { throw new Error('4006: you have used up your daily free allocation of 10,000 neurons'); } } };
+  const res = await quietly(() => aiCheck(aiRequest('land for 10k'), env));
+  assert.equal(res.status, 429);
+  assert.equal((await res.json()).error, 'ai_limit');
+});
+
+test('AI: Groq is tried first, and Workers AI takes over when Groq is rate-limited', async () => {
+  const { aiCheck, providers } = await import('../server/ai-check.js');
+  const env = { GROQ_API_KEY: 'test', AI: { run: async () => ({ response: goodAnswer }) } };
+  assert.deepEqual(providers(env).map((p) => p.provider), ['groq', 'workers-ai', 'workers-ai']);
+  const realFetch = globalThis.fetch;
+  let groqBody;
+  globalThis.fetch = async (url, init) => {
+    groqBody = JSON.parse(init.body);
+    return new Response('rate limited', { status: 429 });
+  };
+  try {
+    const res = await quietly(() => aiCheck(aiRequest('land for 10k'), env));
+    assert.equal(res.status, 200);
+    assert.equal(groqBody.response_format.json_schema.strict, true);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('AI: Groq answer is used when it works', async () => {
+  const { aiCheck } = await import('../server/ai-check.js');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(goodAnswer) } }] }), { status: 200 });
+  try {
+    const res = await aiCheck(aiRequest('land for 10k'), { GROQ_API_KEY: 'test' });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).verdict, 'caution');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 // ---------- AI output guardrails ----------
 
 test('AI output: no "safe" verdict, reassuring text dropped, unexplained verdicts downgraded', async () => {

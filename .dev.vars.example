@@ -5,3 +5,6 @@
 GSB_API_KEY=
 # abuse.ch URLhaus Auth-Key (free account at https://auth.abuse.ch/).
 URLHAUS_AUTH_KEY=
+# Groq API key for the AI check (free account at https://console.groq.com/keys).
+# Optional: without it, Cloudflare Workers AI is used.
+GROQ_API_KEY=

@@ -4,9 +4,13 @@
 // CheckAm, this sends the message text to a model, so the page only calls it
 // after a tap that says so. Nothing is stored.
 //
-// Runs on Cloudflare Workers AI:
-//   - Cloudflare Pages: the AI binding (wrangler.toml [ai]).
-//   - Vercel/other: the Workers AI REST API with CF_ACCOUNT_ID + CF_AI_TOKEN.
+// Providers are tried in order until one gives a usable answer, so a busy
+// model, a timeout or one provider's used-up free allowance doesn't break it:
+//   1. Groq (if GROQ_API_KEY is set): fast, own free allowance.
+//   2. Cloudflare Workers AI, main model, then a backup model.
+//      Cloudflare Pages uses the AI binding (wrangler.toml [ai]); Vercel/other
+//      use the REST API with CF_ACCOUNT_ID + CF_AI_TOKEN.
+// Neither provider uses the text to train models.
 //
 // Guardrails live in code, not just in the prompt:
 //   - The model can only answer danger | caution | unclear. There is no "safe".
@@ -14,7 +18,11 @@
 //   - A "danger"/"caution" verdict with no stated reasons is downgraded.
 //   - The page only ever lets the AI raise the level, never lower it.
 
-const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const WORKERS_AI_MODELS = ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-4-scout-17b-16e-instruct'];
+const GROQ_DEFAULT_MODEL = 'openai/gpt-oss-120b';
+const GROQ_STRICT_SCHEMA_MODELS = /^(?:openai\/gpt-oss|qwen\/qwen3)/;
+const ATTEMPT_TIMEOUT_MS = 20000;
+const TOTAL_BUDGET_MS = 45000;
 const MAX_CHARS = 3000;
 const VERDICTS = new Set(['danger', 'caution', 'unclear']);
 const REASSURING = /\b(?:is|looks|seems|appears|sounds)\s+(?:to be\s+)?(?:safe|legit|legitimate|genuine|real|authentic|trustworthy)\b|\bnot a scam\b|\bno be scam\b|\be (?:dey )?safe\b/i;
@@ -41,6 +49,16 @@ const SCHEMA = {
   required: ['verdict', 'signs', 'checks'],
 };
 
+// Strict mode (guaranteed to match) needs every object closed and every field required.
+const STRICT_SCHEMA = {
+  ...SCHEMA,
+  additionalProperties: false,
+  properties: {
+    ...SCHEMA.properties,
+    signs: { type: 'array', items: { ...SCHEMA.properties.signs.items, additionalProperties: false } },
+  },
+};
+
 function systemPrompt(lang) {
   return `You are CheckAm's assistant. You help people in Nigeria judge whether a message, ad, receipt or screenshot text they received might be a scam.
 
@@ -59,7 +77,7 @@ Do NOT flag ordinary messages: chats between friends or family, reminders, notic
 Write "title", "why" and "checks" in ${LANGUAGE[lang] || LANGUAGE.en}. Short sentences for a worried reader on a small phone.`;
 }
 
-/** env: { AI?, CF_ACCOUNT_ID?, CF_AI_TOKEN?, AI_MODEL? } */
+/** env: { GROQ_API_KEY?, GROQ_MODEL?, AI?, CF_ACCOUNT_ID?, CF_AI_TOKEN?, AI_MODEL? } */
 export async function aiCheck(request, env = {}) {
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { Allow: 'POST' });
 
@@ -73,39 +91,83 @@ export async function aiCheck(request, env = {}) {
   if (!text) return json({ error: 'no_text' }, 400);
   const lang = body.lang === 'pcm' ? 'pcm' : 'en';
 
-  const run = modelRunner(env);
-  if (!run) return json({ error: 'ai_unavailable' }, 503);
+  const attempts = providers(env);
+  if (!attempts.length) return json({ error: 'ai_unavailable' }, 503);
 
   const messages = [
     { role: 'system', content: systemPrompt(lang) },
     { role: 'user', content: `Message to check:\n"""\n${text}\n"""` },
   ];
 
-  let raw;
-  try {
-    raw = await run(messages);
-  } catch {
-    return json({ error: 'ai_failed' }, 502);
+  const started = Date.now();
+  let allQuota = true;
+  for (const attempt of attempts) {
+    const left = TOTAL_BUDGET_MS - (Date.now() - started);
+    if (left < 3000) break;
+    try {
+      const result = sanitize(await withTimeout(attempt.run(messages), Math.min(ATTEMPT_TIMEOUT_MS, left)));
+      if (result) return json({ ...result, lang }, 200, { 'Cache-Control': 'no-store' });
+      allQuota = false;
+      logFailure(attempt, 'bad_output', 'unusable answer');
+    } catch (err) {
+      const kind = isQuotaError(err) ? 'quota' : err?.message === 'timeout' ? 'timeout' : 'error';
+      if (kind !== 'quota') allQuota = false;
+      logFailure(attempt, kind, err?.message);
+    }
   }
-  const result = sanitize(raw);
-  if (!result) return json({ error: 'ai_bad_output' }, 502);
-  return json({ ...result, lang }, 200, { 'Cache-Control': 'no-store' });
+  // Every provider said "limit reached": tell the page so it can say so plainly.
+  if (allQuota) return json({ error: 'ai_limit' }, 429);
+  return json({ error: 'ai_failed' }, 502);
 }
 
-function modelRunner(env) {
-  const model = env.AI_MODEL || DEFAULT_MODEL;
+/** Ordered list of { provider, model, run(messages) } to try. */
+export function providers(env) {
+  const list = [];
+  if (env.GROQ_API_KEY) {
+    const model = env.GROQ_MODEL || GROQ_DEFAULT_MODEL;
+    list.push({ provider: 'groq', model, run: (messages) => runGroq(env.GROQ_API_KEY, model, messages) });
+  }
+  const workers = workersAI(env);
+  if (workers) {
+    const models = env.AI_MODEL ? [env.AI_MODEL, ...WORKERS_AI_MODELS.filter((m) => m !== env.AI_MODEL)] : WORKERS_AI_MODELS;
+    for (const model of models) list.push({ provider: 'workers-ai', model, run: (messages) => workers(model, messages) });
+  }
+  return list;
+}
+
+async function runGroq(apiKey, model, messages) {
+  const strict = GROQ_STRICT_SCHEMA_MODELS.test(model);
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.2,
+      max_completion_tokens: 1200,
+      ...(model.startsWith('openai/gpt-oss') ? { reasoning_effort: 'low' } : {}),
+      response_format: strict
+        ? { type: 'json_schema', json_schema: { name: 'checkam_result', strict: true, schema: STRICT_SCHEMA } }
+        : { type: 'json_object' },
+    }),
+  });
+  if (!res.ok) throw new Error(`groq ${res.status}`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content;
+}
+
+function workersAI(env) {
   const input = (messages) => ({
     messages,
     response_format: { type: 'json_schema', json_schema: SCHEMA },
     max_tokens: 700,
     temperature: 0.2,
   });
-
   if (env.AI && typeof env.AI.run === 'function') {
-    return async (messages) => (await env.AI.run(model, input(messages))).response;
+    return async (model, messages) => (await env.AI.run(model, input(messages))).response;
   }
   if (env.CF_ACCOUNT_ID && env.CF_AI_TOKEN) {
-    return async (messages) => {
+    return async (model, messages) => {
       const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/ai/run/${model}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${env.CF_AI_TOKEN}`, 'Content-Type': 'application/json' },
@@ -116,6 +178,25 @@ function modelRunner(env) {
     };
   }
   return null;
+}
+
+// Workers AI reports a used-up free allowance as error 4006; Groq and the
+// REST API answer HTTP 429.
+function isQuotaError(err) {
+  return /\b(?:4006|429)\b|quota|rate.?limit|daily free allocation|neurons|too many requests/i.test(String(err?.message || err));
+}
+
+function withTimeout(promise, ms) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), ms); }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+// Logged to Cloudflare/Vercel function logs. Never includes the message text.
+function logFailure(attempt, kind, detail) {
+  console.error(JSON.stringify({ event: 'ai_attempt_failed', provider: attempt.provider, model: attempt.model, kind, detail: String(detail || '').slice(0, 160) }));
 }
 
 const clean = (s, max) => (typeof s === 'string' ? s.replace(/\s+/g, ' ').trim().slice(0, max) : '');

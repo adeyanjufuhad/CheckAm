@@ -261,7 +261,8 @@ async function askAI() {
   render();
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    // The server may try several AI models in turn, so allow a little longer.
+    const timer = setTimeout(() => controller.abort(), 55000);
     const res = await fetch('/api/ai-check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -269,6 +270,12 @@ async function askAI() {
       signal: controller.signal,
     });
     clearTimeout(timer);
+    if (res.status === 429) {
+      if (runId !== state.runId) return;
+      state.ai = { status: 'failed', reason: 'limit' };
+      render();
+      return;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const result = await res.json();
     if (runId !== state.runId) return;
@@ -295,6 +302,8 @@ function renderAI() {
     );
   } else if (ai.status === 'loading') {
     block.append(el('p', { class: 'pending' }, el('span', { class: 'spinner', 'aria-hidden': 'true' }), t('aiLoading')));
+  } else if (ai.status === 'failed' && ai.reason === 'limit') {
+    block.append(el('p', { class: 'muted' }, t('aiLimit')));
   } else if (ai.status === 'failed') {
     block.append(
       el('p', { class: 'muted' }, t('aiFailed')),
